@@ -1,4 +1,4 @@
-import { PHASES, counts, MANUAL_REASON, isActive } from "./model.js";
+import { counts, MANUAL_REASON, isActive } from "./model.js";
 import { addFiles, releaseFile, releaseAllFiles, renderMedia, mediaKey } from "./media.js";
 import { initializeProducts } from "./products.js";
 import { $, element, sendMessage } from "./ui.js";
@@ -6,8 +6,9 @@ import { createQueue } from "./queue.js";
 
 const tabs = ["tasks", "add", "manual"];
 const enqueueDraft = createQueue();
-const reviewLabels = { pending: "待处理", processing: "处理中", replied: "模拟已回复", manual: "待人工" };
-const runLabels = { idle: "未开始", running: "进行中", paused: "已暂停", recovering: "页面恢复中", completed: "本轮完成", ended: "已结束" };
+const reviewLabels = { pending: "待处理", replied: "模拟已回复", manual: "待人工" };
+const groupLabels = { pending: "剩余评价队列", replied: "已完成", manual: "待人工" };
+const runLabels = { idle: "未开始", running: "运行中", paused: "已暂停", recovering: "页面恢复中", completed: "本轮完成", ended: "已结束" };
 
 let state = null;
 let context = null;
@@ -22,6 +23,7 @@ let controlBusy = false;
 let pauseRequested = false;
 let toastTimer;
 let currentPreviewKey = "";
+let renderedListKey = "";
 let manualReviewId = null;
 let mediaReviewId = null;
 
@@ -114,6 +116,7 @@ function renderAccess() {
   } else if (context?.source) {
     $("source-label").textContent = context.bound ? "固定处理的页面" : "准备使用的页面";
     $("source-title").textContent = context.source.title;
+    $("source-title").title = `${context.bound ? "固定处理" : "准备使用"}：${context.source.title}\n${context.source.url}`;
     $("source-url").textContent = context.source.url;
     $("source-url").title = context.source.url;
     $("end-button").hidden = !context.bound;
@@ -134,24 +137,27 @@ function renderRecovery() {
   if (history.some(record => record.id === selected)) $("saved-records").value = selected;
 }
 
+function renderReply(container, text) {
+  container.hidden = !text;
+  if (!text || container.lastElementChild?.textContent === text) return;
+  const copy = element("p", "", text);
+  copy.lang = "en";
+  container.replaceChildren(element("span", "field-caption", "生成回复"), copy);
+}
+
 function renderCurrent() {
   const current = state.reviews.find(review => review.id === state.currentId);
-  $("current-card").hidden = !current || pauseRequested;
+  $("current-card").hidden = !current || pauseRequested || !["all", "pending"].includes($("review-filter").value);
+  if ($("current-card").hidden) $("current-media").querySelectorAll("video").forEach(video => video.pause());
   if (!current) {
     if (currentPreviewKey) renderMedia($("current-media"), []);
     currentPreviewKey = "";
     return;
   }
   $("current-text").textContent = current.text || "这是一条仅包含图片／视频的评价。";
-  $("phase-label").textContent = PHASES[state.phase];
-  $("current-reply-box").hidden = !current.reply;
-  $("current-reply").textContent = current.reply;
-  document.querySelectorAll(".steps li").forEach((step, index) => {
-    step.classList.toggle("active", index === state.phase);
-    step.classList.toggle("done", index < state.phase);
-    if (index === state.phase) step.setAttribute("aria-current", "step");
-    else step.removeAttribute("aria-current");
-  });
+  renderReply($("current-reply-box"), current.reply);
+  $("current-media-button").hidden = !current.attachments.length;
+  $("current-media-button").dataset.id = current.id;
   const key = `${current.id}:${mediaKey(current.attachments)}`;
   if (key !== currentPreviewKey) {
     renderMedia($("current-media"), current.attachments);
@@ -170,13 +176,19 @@ function reviewAction(label, action, id) {
 function reviewCard(review, number) {
   const card = element("article", "review-card");
   card.dataset.reviewId = review.id;
-  const heading = element("div", "card-heading");
-  const badge = element("span", "badge", reviewLabels[review.status]);
-  badge.dataset.status = review.status;
-  heading.append(element("span", "review-number", `评价 ${String(number).padStart(2, "0")}`), badge);
-  const text = element("p", "review-text", review.text || "仅图片／视频评价");
-  text.lang = "en";
-  card.append(heading, text);
+  if (number !== undefined) {
+    const heading = element("div", "card-heading");
+    const badge = element("span", "badge", reviewLabels[review.status]);
+    badge.dataset.status = review.status;
+    heading.append(element("span", "review-number", `评价 ${String(number).padStart(2, "0")}`), badge);
+    card.append(heading);
+  }
+  // Pending queue items already show their full text in the expanded summary.
+  if (number !== undefined || review.status !== "pending") {
+    const text = element("p", "review-text", review.text || "仅图片／视频评价");
+    text.lang = review.text ? "en" : "zh-CN";
+    card.append(text);
+  }
   const actions = element("div", "card-actions");
   if (review.attachments.length) {
     actions.append(reviewAction(`${review.attachments.length} 个附件 · 查看素材`, "media", review.id));
@@ -189,9 +201,7 @@ function reviewCard(review, number) {
   if (actions.childElementCount) card.append(actions);
   if (review.reply && review.status === "replied") {
     const reply = element("div", "reply-box");
-    const copy = element("p", "", review.reply);
-    copy.lang = "en";
-    reply.append(element("span", "field-caption", "示例回复"), copy);
+    renderReply(reply, review.reply);
     card.append(reply);
   }
   if (review.status === "manual") {
@@ -202,17 +212,67 @@ function reviewCard(review, number) {
   return card;
 }
 
+function queueItem(review, number, open) {
+  const item = element("details", "queue-item");
+  item.dataset.reviewId = review.id;
+  item.dataset.status = review.status;
+  item.open = open;
+  const summary = element("summary", "review-summary");
+  const copy = element("span", "queue-copy");
+  const snippet = element("span", "review-snippet", review.text || "仅图片／视频评价");
+  snippet.lang = review.text ? "en" : "zh-CN";
+  if (review.status !== "pending") {
+    const meta = element("span", "review-meta");
+    const badge = element("span", "badge", reviewLabels[review.status]);
+    badge.dataset.status = review.status;
+    meta.append(badge, element("span", "review-number", `评价 ${String(number).padStart(2, "0")}`));
+    copy.append(meta);
+  }
+  copy.append(snippet);
+  const chevron = element("img", "icon queue-chevron");
+  chevron.src = "icons/chevron-right.svg";
+  chevron.alt = "";
+  summary.append(copy);
+  if (review.attachments.length) {
+    const count = element("span", "attachment-summary");
+    count.setAttribute("aria-label", `${review.attachments.length} 个附件`);
+    const icon = element("img", "icon");
+    icon.src = "icons/image.svg";
+    icon.alt = "";
+    count.append(icon, document.createTextNode(review.attachments.length));
+    summary.append(count);
+  }
+  summary.append(chevron);
+  item.append(summary, reviewCard(review));
+  return item;
+}
+
 function renderLists() {
   const filter = $("review-filter").value;
-  const visible = [], manual = [];
+  const key = JSON.stringify([filter, state.reviews]);
+  if (key === renderedListKey) return; // Keep focus and disclosure state on unchanged snapshots.
+  renderedListKey = key;
+  const expanded = new Set([...$("review-list").querySelectorAll("details[open]")].map(item => item.dataset.reviewId));
+  const groups = { pending: [], replied: [], manual: [] }, manual = [];
   state.reviews.forEach((review, index) => {
-    if (filter === "all" || (filter === "pending" ? ["pending", "processing"].includes(review.status) : review.status === filter)) {
-      visible.push(reviewCard(review, index + 1));
-    }
+    groups[review.status]?.push(queueItem(review, index + 1, expanded.has(review.id)));
     if (review.status === "manual") manual.push(reviewCard(review, index + 1));
   });
-  $("review-list").replaceChildren(...visible);
-  $("filter-empty").hidden = visible.length > 0;
+  const sections = [];
+  for (const [status, label] of Object.entries(groupLabels)) {
+    if (filter !== "all" && filter !== status) continue;
+    const items = groups[status];
+    if (filter === "all" && status === "manual" && !items.length) continue;
+    const section = element("section", "queue-group");
+    section.dataset.reviewGroup = status;
+    const heading = element("h3", "group-heading", label);
+    heading.id = `group-${status}`;
+    heading.append(element("span", "group-count", items.length));
+    section.setAttribute("aria-labelledby", heading.id);
+    section.append(heading, ...(items.length ? items : [element("p", "queue-empty", `暂无${status === "pending" ? "待处理" : label}评价`)]));
+    sections.push(section);
+  }
+  $("review-list").replaceChildren(...sections);
   $("manual-list").replaceChildren(...manual);
   $("manual-empty").hidden = manual.length > 0;
 }
@@ -222,32 +282,29 @@ function render() {
   const totals = counts(state);
   const running = isActive(state);
   const displayStatus = pauseRequested ? "paused" : state.status;
-  $("count-pending").textContent = totals.pending;
+  $("count-pending").textContent = state.reviews.filter(review => review.status === "pending").length;
   $("count-replied").textContent = totals.replied;
   $("count-manual").textContent = totals.manual;
   $("manual-tab-count").textContent = totals.manual;
   $("manual-tab-count").hidden = !totals.manual;
   $("manual-page-count").textContent = `${totals.manual} 条`;
-  $("list-count").textContent = totals.total;
   $("run-status").textContent = pauseRequested ? "正在暂停" : runLabels[state.status];
   $("run-status").dataset.status = displayStatus;
   $("task-empty").hidden = totals.total > 0;
   $("task-content").hidden = totals.total === 0;
   const processed = totals.replied + totals.manual;
-  $("progress-value").textContent = `${processed} / ${totals.total}`;
-  $("progress-label").textContent = "进度";
+  $("progress-value").textContent = `${processed}/${totals.total}`;
   const progress = totals.total ? processed / totals.total : 0;
+  $("progress-percent").textContent = `${Math.round(progress * 100)}%`;
   $("progress-fill").style.transform = `scaleX(${progress})`;
   $("task-progress").setAttribute("aria-valuenow", String(Math.round(progress * 100)));
   $("clear-button").disabled = running;
   $("error-banner").hidden = !state.error && !state.endReason;
   $("error-banner").textContent = state.error || state.endReason;
-  $("run-button").replaceChildren(document.createTextNode(pauseRequested ? "正在暂停…" :
-    running ? "立即暂停" : state.status === "paused" ? "继续演示" : state.status === "completed" ? "本轮已完成" : "开始演示"),
-    element("span", "", running ? "Ⅱ" : "→"));
+  $("run-button").textContent = pauseRequested ? "正在暂停…" :
+    running ? "立即暂停" : state.status === "paused" ? "继续演示" : state.status === "completed" ? "本轮已完成" : "开始演示";
   $("run-button").disabled = controlBusy || (!running && !totals.pending);
   $("run-button").setAttribute("aria-label", pauseRequested ? "正在暂停" : running ? "立即暂停当前处理" : "开始或继续本机演示");
-  document.querySelector(".control-dock").dataset.runStatus = displayStatus;
   renderCurrent();
   renderLists();
   renderRecovery();
@@ -387,7 +444,7 @@ $("restore-record").addEventListener("click", onAction(async () => {
   notify("记录已恢复到此页，点击继续演示后才会运行。");
 }));
 
-$("review-filter").addEventListener("change", renderLists);
+$("review-filter").addEventListener("change", () => { renderCurrent(); renderLists(); });
 $("review-text").addEventListener("input", saveDraft);
 $("manual-reason").addEventListener("input", saveDraft);
 $("manual-check").addEventListener("change", () => { updateManualField(); saveDraft(); });

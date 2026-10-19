@@ -11,14 +11,11 @@
   </head>
   <body>
     <header class="app-header">
-      <div class="brand">
-        <span class="brand-mark" aria-hidden="true">a<span></span></span>
-        <div><h1>AutoReply</h1></div>
-      </div>
+      <h1 class="brand">AutoReply</h1>
       <div class="header-actions">
         <button id="open-products" type="button" class="button secondary header-action" aria-controls="view-products" aria-expanded="false" disabled>添加产品资料</button>
         <div class="suspend-control">
-          <button id="suspend-button" type="button" class="button secondary header-action" aria-describedby="suspend-help" disabled>挂起</button>
+          <button id="suspend-button" type="button" class="button secondary header-action" aria-describedby="suspend-help" disabled>挂起<img src="icons/chevron-right.svg" class="icon" alt=""></button>
           <span id="suspend-help" class="suspend-tooltip" role="tooltip">收起侧边栏，任务继续在原评价页运行。悬浮 logo 跟随本窗口浏览的网页，显示完成进度和待人工数量；点击后返回原任务页。</span>
         </div>
       </div>
@@ -38,18 +35,28 @@
         <button id="context-return" type="button" class="button primary">返回任务页</button>
       </section>
       <section id="source-card" class="source-card" aria-label="任务来源页" hidden>
-        <div class="source-heading"><strong id="source-label">准备使用的页面</strong><button id="end-button" type="button" class="button text-button danger-text" hidden>结束任务</button></div>
-        <p id="source-title"></p><p id="source-url" class="source-url"></p>
+        <span id="source-label" class="visually-hidden">准备使用的页面</span>
+        <div class="source-heading">
+          <div class="source-identity">
+            <details class="source-details" aria-labelledby="source-label source-title"><summary><span id="source-title"></span><img src="icons/chevron-right.svg" class="icon source-chevron" alt=""></summary><p id="source-url" class="source-url"></p></details>
+            <span id="run-status" class="run-status" role="status">未开始</span>
+          </div>
+          <button id="end-button" type="button" class="button secondary" hidden>结束任务</button>
+        </div>
       </section>
 
       <section id="view-tasks" role="tabpanel" aria-labelledby="tab-tasks">
-        <div class="section-heading"><h2>评价回复任务</h2><span id="run-status" class="badge">未开始</span></div>
+        <section class="task-overview" aria-label="任务进度">
+          <div class="stats" aria-label="评价数量">
+            <div><span class="stat-label">待处理</span><span id="count-pending" class="stat-value">0</span></div>
+            <div><span class="stat-label">模拟已回复</span><span id="count-replied" class="stat-value">0</span></div>
+            <div><span class="stat-label">待人工</span><span id="count-manual" class="stat-value">0</span></div>
+            <div class="processed-stat"><span class="stat-label">已处理</span><span id="progress-value">0/0</span></div>
+          </div>
+          <div class="progress-row"><div id="task-progress" class="progress" role="progressbar" aria-label="已处理评价" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progress-fill"></div></div><span id="progress-percent">0%</span></div>
+        </section>
 
-        <div class="stats" aria-label="评价数量">
-          <div><span id="count-pending" class="stat-value">0</span><span class="stat-label">待处理</span></div>
-          <div><span id="count-replied" class="stat-value">0</span><span class="stat-label">模拟已回复</span></div>
-          <div><span id="count-manual" class="stat-value">0</span><span class="stat-label">待人工</span></div>
-        </div>
+        <div class="queue-heading"><h2>评价队列</h2><select id="review-filter" aria-label="筛选评价"><option value="all">全部评价</option><option value="pending">待处理</option><option value="replied">已完成</option><option value="manual">待人工</option></select></div>
 
         <button id="import-legacy" type="button" class="button secondary" hidden>恢复旧版记录</button>
         <div id="recovery-controls" class="recovery-controls" hidden>
@@ -59,29 +66,23 @@
         </div>
 
         <div id="task-empty" class="empty-state">
-          <div class="empty-drawing" aria-hidden="true"><span></span><span></span><span></span></div>
           <h3>暂无评价</h3>
           <button type="button" class="button primary" data-go="add">添加一条评价</button>
           <button type="button" class="button text-button" data-command="SAMPLES">载入演示评价</button>
         </div>
 
         <div id="task-content" hidden>
-          <div class="progress-heading"><span id="progress-label">进度</span><span id="progress-value">0 / 0</span></div>
-          <div id="task-progress" class="progress" role="progressbar" aria-label="已处理评价" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progress-fill"></div></div>
-
           <article id="current-card" class="current-card" hidden>
-            <div class="card-heading"><h3>当前处理</h3><span class="live-label"><span class="status-dot"></span><span id="phase-label">读取评价</span></span></div>
+            <div class="card-heading">
+              <h3>当前评价</h3>
+              <button id="current-media-button" type="button" class="button text-button current-media-action" data-action="media" title="查看或重新选择素材" hidden><img src="icons/image.svg" class="icon" alt=""><span class="visually-hidden">查看或重新选择素材</span></button>
+            </div>
             <p id="current-text" class="review-text" lang="en"></p>
             <div id="current-media" class="media-grid compact-media"></div>
-            <ol class="steps" aria-label="当前处理阶段">
-              <li>读取评价</li><li>生成示例</li><li>模拟回复</li>
-            </ol>
-            <div id="current-reply-box" class="reply-box" hidden><span class="field-caption">示例回复</span><p id="current-reply" lang="en"></p></div>
+            <div id="current-reply-box" class="reply-box" hidden></div>
           </article>
 
-          <div class="list-heading"><h3>评价列表 <span id="list-count" class="muted">0</span></h3><select id="review-filter" aria-label="筛选评价"><option value="all">全部评价</option><option value="pending">待处理</option><option value="replied">模拟已回复</option><option value="manual">待人工</option></select></div>
           <div id="review-list" class="review-list"></div>
-          <p id="filter-empty" class="small-empty" hidden>这个分类下还没有评价。</p>
           <div class="list-actions"><button type="button" class="button text-button" data-command="SAMPLES">再添加演示评价</button><button id="clear-button" type="button" class="button text-button danger-text">清空记录</button></div>
         </div>
 
@@ -96,7 +97,7 @@
           <div class="field-title"><span class="field-label">图片 / 视频</span><span id="attachment-count" class="muted">0 个附件</span></div>
           <input id="file-input" class="visually-hidden" type="file" accept="image/*,video/*" multiple aria-label="选择评价图片或视频">
           <button id="drop-zone" class="drop-zone" type="button">
-            <span class="upload-symbol" aria-hidden="true"><span></span></span>
+            <img src="icons/image-plus.svg" class="upload-icon" alt="">
             <strong>选择或拖入图片／视频</strong>
           </button>
           <div id="draft-media" class="media-grid"></div>
@@ -110,7 +111,7 @@
 
       <section id="view-manual" role="tabpanel" aria-labelledby="tab-manual" hidden>
         <div class="section-heading"><h2>待人工评价</h2><span id="manual-page-count" class="badge">0 条</span></div>
-        <div id="manual-empty" class="empty-state small"><div class="empty-drawing" aria-hidden="true"><span></span><span></span><span></span></div><h3>暂无待人工评价</h3></div>
+        <div id="manual-empty" class="empty-state small"><h3>暂无待人工评价</h3></div>
         <div id="manual-list" class="review-list"></div>
       </section>
 
@@ -130,7 +131,7 @@
     </main>
 
     <footer class="control-dock" inert data-initializing>
-      <div class="dock-actions"><button id="run-button" type="button" class="button primary" disabled>开始演示<span aria-hidden="true">→</span></button><button id="quick-add" type="button" class="button secondary" data-go="add">添加评价</button></div>
+      <div class="dock-actions"><button id="run-button" type="button" class="button primary" disabled>开始演示</button><button id="quick-add" type="button" class="button secondary" data-go="add">添加评价</button></div>
     </footer>
 
     <dialog id="manual-dialog" aria-labelledby="manual-dialog-title">

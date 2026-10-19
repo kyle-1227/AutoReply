@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AutoReply · 商品评价回复",
-  "version": "0.2.1",
+  "version": "0.3.1",
   "description": "商品评价回复的本机前端演示：产品资料、素材预览、任务控制与待人工清单。",
   "minimum_chrome_version": "142",
   "permissions": ["sidePanel", "storage", "alarms", "tabs", "scripting"],

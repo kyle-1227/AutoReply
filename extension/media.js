@@ -1,3 +1,5 @@
+import { element } from "./ui.js";
+
 // File objects and object URLs live only in this sidebar document.
 const sessionFiles = new Map();
 
@@ -81,5 +83,4 @@ export function renderMedia(container, attachments, onRemove) {
     container.append(card);
   }
 }
-import { element } from "./ui.js";
 

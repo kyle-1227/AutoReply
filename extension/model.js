@@ -5,7 +5,6 @@ export const WAKE_ALARM = "autoreply.demo.wake";
 export const WORKSPACE_KEY = "autoreply.workspace.v2";
 export const BINDINGS_KEY = "autoreply.bindings.v2";
 export const PRODUCTS_KEY = "autoreply.products.v1";
-export const PHASES = ["读取评价", "生成示例回复", "模拟回复"];
 export const STEP_MS = 1800;
 export const MANUAL_REASON = "运营手动标记，待人工后续处理。";
 export const isActive = task => ["running", "recovering"].includes(task?.status);
