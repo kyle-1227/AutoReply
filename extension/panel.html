@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>AutoReply · 商品评价回复</title>
+    <link rel="icon" href="icons/icon-32.png">
+    <link rel="stylesheet" href="panel.css">
+    <script type="module" src="panel.js"></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">a<span></span></span>
+        <div><h1>AutoReply</h1></div>
+      </div>
+      <div class="header-actions">
+        <button id="open-products" type="button" class="button secondary header-action" aria-controls="view-products" aria-expanded="false" disabled>添加产品资料</button>
+        <div class="suspend-control">
+          <button id="suspend-button" type="button" class="button secondary header-action" aria-describedby="suspend-help" disabled>挂起</button>
+          <span id="suspend-help" class="suspend-tooltip" role="tooltip">收起侧边栏，任务继续在原评价页运行。悬浮 logo 跟随本窗口浏览的网页，显示完成进度和待人工数量；点击后返回原任务页。</span>
+        </div>
+      </div>
+    </header>
+
+    <nav class="tabs" role="tablist" aria-label="插件页面" inert data-initializing>
+      <button id="tab-tasks" role="tab" aria-selected="true" aria-controls="view-tasks" data-tab="tasks" tabindex="0">任务</button>
+      <button id="tab-add" role="tab" aria-selected="false" aria-controls="view-add" data-tab="add" tabindex="-1">添加评价</button>
+      <button id="tab-manual" role="tab" aria-selected="false" aria-controls="view-manual" data-tab="manual" tabindex="-1">待人工 <span id="manual-tab-count" class="tab-count" hidden>0</span></button>
+    </nav>
+
+    <main id="main-content" inert data-initializing>
+      <div id="error-banner" class="notice notice-error" role="alert" hidden></div>
+      <section id="context-notice" class="empty-state" hidden>
+        <h2 id="context-notice-title">此窗口正在使用</h2>
+        <p id="context-notice-text"></p>
+        <button id="context-return" type="button" class="button primary">返回任务页</button>
+      </section>
+      <section id="source-card" class="source-card" aria-label="任务来源页" hidden>
+        <div class="source-heading"><strong id="source-label">准备使用的页面</strong><button id="end-button" type="button" class="button text-button danger-text" hidden>结束任务</button></div>
+        <p id="source-title"></p><p id="source-url" class="source-url"></p>
+      </section>
+
+      <section id="view-tasks" role="tabpanel" aria-labelledby="tab-tasks">
+        <div class="section-heading"><h2>评价回复任务</h2><span id="run-status" class="badge">未开始</span></div>
+
+        <div class="stats" aria-label="评价数量">
+          <div><span id="count-pending" class="stat-value">0</span><span class="stat-label">待处理</span></div>
+          <div><span id="count-replied" class="stat-value">0</span><span class="stat-label">模拟已回复</span></div>
+          <div><span id="count-manual" class="stat-value">0</span><span class="stat-label">待人工</span></div>
+        </div>
+
+        <button id="import-legacy" type="button" class="button secondary" hidden>恢复旧版记录</button>
+        <div id="recovery-controls" class="recovery-controls" hidden>
+          <label class="field-label" for="saved-records">保存的任务记录</label>
+          <select id="saved-records" aria-label="选择保存的任务记录"></select>
+          <button id="restore-record" type="button" class="button secondary">恢复到此页</button>
+        </div>
+
+        <div id="task-empty" class="empty-state">
+          <div class="empty-drawing" aria-hidden="true"><span></span><span></span><span></span></div>
+          <h3>暂无评价</h3>
+          <button type="button" class="button primary" data-go="add">添加一条评价</button>
+          <button type="button" class="button text-button" data-command="SAMPLES">载入演示评价</button>
+        </div>
+
+        <div id="task-content" hidden>
+          <div class="progress-heading"><span id="progress-label">进度</span><span id="progress-value">0 / 0</span></div>
+          <div id="task-progress" class="progress" role="progressbar" aria-label="已处理评价" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progress-fill"></div></div>
+
+          <article id="current-card" class="current-card" hidden>
+            <div class="card-heading"><h3>当前处理</h3><span class="live-label"><span class="status-dot"></span><span id="phase-label">读取评价</span></span></div>
+            <p id="current-text" class="review-text" lang="en"></p>
+            <div id="current-media" class="media-grid compact-media"></div>
+            <ol class="steps" aria-label="当前处理阶段">
+              <li>读取评价</li><li>生成示例</li><li>模拟回复</li>
+            </ol>
+            <div id="current-reply-box" class="reply-box" hidden><span class="field-caption">示例回复</span><p id="current-reply" lang="en"></p></div>
+          </article>
+
+          <div class="list-heading"><h3>评价列表 <span id="list-count" class="muted">0</span></h3><select id="review-filter" aria-label="筛选评价"><option value="all">全部评价</option><option value="pending">待处理</option><option value="replied">模拟已回复</option><option value="manual">待人工</option></select></div>
+          <div id="review-list" class="review-list"></div>
+          <p id="filter-empty" class="small-empty" hidden>这个分类下还没有评价。</p>
+          <div class="list-actions"><button type="button" class="button text-button" data-command="SAMPLES">再添加演示评价</button><button id="clear-button" type="button" class="button text-button danger-text">清空记录</button></div>
+        </div>
+
+      </section>
+
+      <section id="view-add" role="tabpanel" aria-labelledby="tab-add" hidden>
+        <div class="section-heading"><h2>添加评价</h2></div>
+        <form id="review-form" novalidate>
+          <label class="field-label" for="review-text">评价文字</label>
+          <textarea id="review-text" rows="5" placeholder="输入评价文字"></textarea>
+
+          <div class="field-title"><span class="field-label">图片 / 视频</span><span id="attachment-count" class="muted">0 个附件</span></div>
+          <input id="file-input" class="visually-hidden" type="file" accept="image/*,video/*" multiple aria-label="选择评价图片或视频">
+          <button id="drop-zone" class="drop-zone" type="button">
+            <span class="upload-symbol" aria-hidden="true"><span></span></span>
+            <strong>选择或拖入图片／视频</strong>
+          </button>
+          <div id="draft-media" class="media-grid"></div>
+
+          <div class="manual-option"><label class="checkbox-label"><input id="manual-check" type="checkbox"><span>这条评价交给人工处理</span></label></div>
+          <div id="manual-reason-field" hidden><label class="field-label" for="manual-reason">标记原因</label><textarea id="manual-reason" rows="2" placeholder="输入标记原因"></textarea></div>
+          <p id="form-error" class="inline-error" role="alert" hidden></p>
+          <div class="form-actions"><button id="add-button" type="submit" class="button primary">加入待处理列表</button><button type="button" class="button secondary" data-go="tasks">返回任务</button></div>
+        </form>
+      </section>
+
+      <section id="view-manual" role="tabpanel" aria-labelledby="tab-manual" hidden>
+        <div class="section-heading"><h2>待人工评价</h2><span id="manual-page-count" class="badge">0 条</span></div>
+        <div id="manual-empty" class="empty-state small"><div class="empty-drawing" aria-hidden="true"><span></span><span></span><span></span></div><h3>暂无待人工评价</h3></div>
+        <div id="manual-list" class="review-list"></div>
+      </section>
+
+      <section id="view-products" aria-labelledby="products-title" hidden>
+        <div class="section-heading"><h2 id="products-title">添加产品资料</h2><button id="products-back" type="button" class="button text-button">返回</button></div>
+        <form id="product-form" novalidate>
+          <div class="product-field"><label class="field-label" for="product-name">产品名称</label><input id="product-name" type="text" placeholder="输入产品名称" required></div>
+          <div class="product-field"><label class="field-label" for="product-sku">产品编号 / SKU</label><input id="product-sku" type="text" placeholder="输入产品编号或 SKU"></div>
+          <div class="product-field"><label class="field-label" for="product-details">产品资料</label><textarea id="product-details" rows="7" placeholder="填写材质、规格、使用方法、注意事项等" required></textarea></div>
+          <p id="product-error" class="inline-error" role="alert" hidden></p>
+          <div class="form-actions"><button id="save-product" type="submit" class="button primary" disabled>保存产品资料</button><button id="reset-product" type="button" class="button secondary">清空表单</button></div>
+        </form>
+        <div class="list-heading"><h3>已保存的产品 <span id="product-count" class="muted">0</span></h3></div>
+        <p id="products-empty" class="small-empty">暂无产品资料</p>
+        <div id="product-list" class="review-list"></div>
+      </section>
+    </main>
+
+    <footer class="control-dock" inert data-initializing>
+      <div class="dock-actions"><button id="run-button" type="button" class="button primary" disabled>开始演示<span aria-hidden="true">→</span></button><button id="quick-add" type="button" class="button secondary" data-go="add">添加评价</button></div>
+    </footer>
+
+    <dialog id="manual-dialog" aria-labelledby="manual-dialog-title">
+      <form id="manual-dialog-form"><h2 id="manual-dialog-title">标记为待人工</h2><label class="field-label" for="dialog-reason">标记原因</label><textarea id="dialog-reason" rows="3" placeholder="输入标记原因"></textarea><div class="form-actions"><button type="submit" class="button primary">确认标记</button><button type="button" class="button secondary" data-close="manual-dialog">取消</button></div></form>
+    </dialog>
+
+    <dialog id="media-dialog" aria-labelledby="media-dialog-title"><div class="card-heading"><h2 id="media-dialog-title">评价素材</h2><button type="button" class="button text-button" data-close="media-dialog">关闭</button></div><div id="dialog-media" class="media-grid"></div><button id="reselect-button" type="button" class="button secondary">重新选择附件</button></dialog>
+    <input id="reselect-input" type="file" accept="image/*,video/*" multiple hidden>
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  </body>
+</html>

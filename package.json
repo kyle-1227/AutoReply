@@ -1,0 +1,11 @@
+{
+  "name": "autoreply-extension",
+  "version": "0.2.1",
+  "private": true,
+  "type": "module",
+  "description": "Local-only Edge side panel prototype; no runtime dependencies.",
+  "scripts": {
+    "check": "node scripts/check.mjs",
+    "package": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1"
+  }
+}

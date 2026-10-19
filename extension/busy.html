@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AutoReply · 窗口状态</title>
+    <link rel="stylesheet" href="panel.css">
+    <script type="module" src="busy.js"></script>
+  </head>
+  <body class="busy-popup">
+    <h2 id="busy-title">此窗口正在使用</h2>
+    <p id="busy-description">正在确认原任务…</p>
+    <p id="busy-source" class="source-url"></p>
+    <button id="return-source" type="button" class="button primary" disabled>返回任务页</button>
+    <p id="busy-error" class="inline-error" role="alert" hidden></p>
+  </body>
+</html>
