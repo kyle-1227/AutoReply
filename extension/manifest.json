@@ -23,6 +23,6 @@
     "128": "icons/icon-128.png"
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'none'; img-src 'self' blob:; media-src 'self' blob:; connect-src 'none'; style-src 'self'; base-uri 'none'"
+    "extension_pages": "script-src 'self'; object-src 'none'; img-src 'self' blob:; media-src 'self' blob:; connect-src https://openrouter.ai; style-src 'self'; base-uri 'none'"
   }
 }

@@ -2,7 +2,7 @@
 
 面向店铺运营的商品评价回复工具，通过 Edge 侧边栏管理评价素材、回复任务和待人工清单。
 
-**当前版本：0.3.1 · 本机前端演示。** 使用原生 HTML、CSS 和模块化 JavaScript，无运行依赖、开发服务器或构建步骤。任务处理和英语回复均在本机模拟；真实店铺评价采集、回复发布、媒体理解、LLM 和按商品加载上下文尚未接入。
+**当前版本：0.3.1 · 本机前端演示。** 使用原生 HTML、CSS 和模块化 JavaScript，无运行依赖、开发服务器或构建步骤。任务处理和英语回复仍在本机模拟；源码已提供独立 LLM 请求模块，尚未连接评价任务。真实店铺评价采集、回复发布、媒体理解和按商品加载上下文尚未接入。
 
 ## 已有功能
 
@@ -83,6 +83,7 @@ extension/                  可直接加载的扩展
   task-runner.js            单个任务的顺序处理、取消与接续
   workspace-store.js        本机保存、共享产品库和旧记录导入
   model.js                  数据结构、状态判断与演示样本
+  llm-client.js             独立 LLM 请求与完整 API 响应，尚未连接任务
   queue.js / ui.js          共用串行队列、界面元素与消息请求
   panel.html / panel.js / panel.css  侧边栏界面
   products.js / media.js    产品资料与素材预览
@@ -92,11 +93,47 @@ extension/                  可直接加载的扩展
 scripts/
   check.mjs                 静态检查
   package.ps1               生成安装 ZIP
+tests/
+  llm-client.test.mjs        LLM 请求、错误、取消与并行调用的回归测试
+.env                        本机 API Key 配置，Git 忽略
 安装说明.md                  安装、更新与使用步骤
 PRODUCT_POSITIONING.md      产品定位与待确认需求
 ```
 
 任务状态由 `TaskRunner` 统一修改；界面发送命令并展示快照。页面归属由协调器管理，处理目标与当前浏览页分离；暂停、结束和刷新通过执行代次使旧回调失效。共用逻辑集中在少量模块中，便于后续替换模拟处理部分。
+
+## 独立 LLM 请求模块
+
+`extension/llm-client.js` 导出 `requestLlm`，使用原生 `fetch` 请求 OpenRouter 的 Chat Completions API。它负责一次非流式请求，不依赖 DOM、插件消息、任务或存储。评价如何组装、使用哪个模型、模型输出正文还是 JSON，均由调用方决定。
+
+```js
+import { requestLlm } from "./extension/llm-client.js";
+
+// Node.js 调用示例；Key 从本机环境读取，不写入源码。
+const response = await requestLlm({
+  apiKey: process.env.OPENROUTER_API_KEY,
+  model: "anthropic/claude-haiku-5.5",
+  messages: [{ role: "user", content: "Reply with OK." }],
+  parameters: { max_tokens: 2048 },
+});
+```
+
+本机 Key 填写在项目根目录的 `.env` 中：`OPENROUTER_API_KEY=你的Key`。该文件已被 Git 忽略，不包含在插件安装包中。运行 Node.js 调试脚本时使用 `--env-file=.env` 加载，再通过 `process.env.OPENROUTER_API_KEY` 传入请求函数；浏览器扩展不会自动读取根目录的 `.env`。
+
+| 参数 | 说明 |
+| --- | --- |
+| `apiKey` | 必填，由调用方传入，模块不保存 |
+| `model` | 必填，调用方明确选择的模型 ID |
+| `messages` | 必填，已组装好的非空消息数组，内容原样发送 |
+| `parameters` | 可选，普通对象，透传模型生成参数；不能包含 `model`、`messages`、`stream` |
+| `signal` | 可选，调用方提供的 `AbortSignal`，可在请求及读取响应期间取消 |
+| `timeoutMs` | 可选，默认 25000 毫秒，可覆盖；这是应用时限，不是服务商上限 |
+
+成功时返回完整的 API JSON，包含正文、模型、用量及其他字段，不提取或解析模型正文。失败时抛出异常：HTTP/API 错误附带 `status`，存在时保留 `code` 和 `retryAfter`；成功响应中的 JSON 解析错误、网络错误、取消和超时保留原生错误。模块不自动重试、等待限流或更换模型。
+
+已于 2026-10-20 使用 `minimax/minimax-m3.1-flash:free` 在 Node.js 和实际 Edge 155 扩展环境完成短文本联调，均取得回复正文、完整响应和用量信息。Haiku 5.5 在当次联调中返回 HTTP 402（额度不足），成功生成尚未验收。
+
+当前侧边栏仍运行本机演示。模型路由、插件内 Key 管理、素材持久化和任务接入留到后续；图片和视频理解尚未联调。
 
 ## 开发检查与打包
 
@@ -104,19 +141,21 @@ PRODUCT_POSITIONING.md      产品定位与待确认需求
 
 ```powershell
 npm.cmd run check
+npm.cmd test
 npm.cmd run package
 ```
 
 - `check`：检查 JavaScript 语法、本地模块与页面资源、HTML ID 和标签引用、版本号及扩展权限。浏览器交互行为需另行实际验证。
+- `test`：使用 Node.js 内置测试验证 LLM 请求、完整响应、错误、取消、超时和并行隔离；测试使用模拟请求，不消耗 API 额度。
 - `package`：在 Windows 下将扩展文件和根目录安装说明打包到 `releases/autoreply-edge-frontend-v0.3.1.zip`，文件名随插件版本号变化。
 
-`releases` 为本地生成目录，`output` 用于本地界面截图与验收记录，均不随源码提交。目前不提供 `npm test`。
+`releases` 为本地生成目录，`output` 用于本地界面截图与验收记录，均不随源码提交。
 
 ## 权限
 
 扩展申请 `sidePanel`、`storage`、`alarms`、`tabs`、`scripting`，以及 HTTP/HTTPS 网站访问权限，用于侧边栏、本机保存、任务唤醒、固定来源校验和网页浮标。
 
-当前前端模拟不需要服务器、API 密钥或额外账号。真实业务接入范围和后续待确认事项见 [产品定位](PRODUCT_POSITIONING.md)。
+侧边栏中的前端模拟不需要服务器、API 密钥或额外账号。独立 LLM 请求模块的联调由调用方提供 API Key。真实业务接入范围和后续待确认事项见 [产品定位](PRODUCT_POSITIONING.md)。
 
 ## 需求与开发安排
 

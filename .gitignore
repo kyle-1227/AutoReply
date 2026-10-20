@@ -2,3 +2,4 @@ node_modules/
 output/
 .playwright-cli/
 releases/
+/.env
