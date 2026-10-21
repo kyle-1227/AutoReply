@@ -14,7 +14,8 @@ export async function initializeProducts({ notify, request, initialDraft = {} })
 
   function saveDraft() {
     const draft = { editingId, editingVersion, name: $("product-name").value,
-      sku: $("product-sku").value, details: $("product-details").value };
+      sku: $("product-sku").value, details: $("product-details").value,
+      shopId: $("product-shop-id").value, productId: $("product-platform-id").value };
     draftWrites = enqueueDraft(() => request("COMMAND", { command: "PRODUCT_DRAFT", payload: draft }));
     draftWrites.catch(() => showError("产品表单草稿保存失败，请重试。"));
   }
@@ -49,6 +50,7 @@ export async function initializeProducts({ notify, request, initialDraft = {} })
       card.dataset.productId = product.id;
       card.append(element("h3", "product-name", product.name));
       if (product.sku) card.append(element("p", "product-sku", `产品编号 / SKU：${product.sku}`));
+      if (product.binding) card.append(element("p", "product-sku", `店铺 ${product.binding.shopId} · 商品 ${product.binding.productId}`));
       card.append(element("p", "product-details", product.details));
       const actions = element("div", "card-actions");
       for (const [action, label] of [["edit", "编辑"], ["delete", "删除"]]) {
@@ -92,7 +94,8 @@ export async function initializeProducts({ notify, request, initialDraft = {} })
     if (sku && products.some(product => product.id !== editingId && product.sku.toLowerCase() === sku.toLowerCase())) {
       return showError("该产品编号 / SKU 已存在，请编辑已有资料或使用其他编号。", "product-sku");
     }
-    const product = { id: editingId, name, sku, details, previousUpdatedAt: editingVersion };
+    const product = { id: editingId, name, sku, details, previousUpdatedAt: editingVersion,
+      shopId: $("product-shop-id").value, productId: $("product-platform-id").value };
     showError();
     try {
       await persist("SAVE", product);
@@ -115,7 +118,8 @@ export async function initializeProducts({ notify, request, initialDraft = {} })
     const product = products.find(item => item.id === button.dataset.id);
     if (!product) return;
     if (button.dataset.productAction === "edit") {
-      restoreDraft({ ...product, editingId: product.id, editingVersion: product.updatedAt });
+      restoreDraft({ ...product, shopId: product.binding?.shopId, productId: product.binding?.productId,
+        editingId: product.id, editingVersion: product.updatedAt });
       saveDraft();
       $("product-name").focus();
       window.scrollTo({ top: 0, behavior: "instant" });
@@ -136,6 +140,8 @@ export async function initializeProducts({ notify, request, initialDraft = {} })
     editingId = products.some(product => product.id === draft.editingId) ? draft.editingId : null;
     editingVersion = editingId ? draft.editingVersion || 0 : 0;
     for (const field of ["name", "sku", "details"]) $(`product-${field}`).value = draft[field] || "";
+    $("product-shop-id").value = draft.shopId || "";
+    $("product-platform-id").value = draft.productId || "";
     $("products-title").textContent = editingId ? "编辑产品资料" : "添加产品资料";
     $("save-product").textContent = editingId ? "保存修改" : "保存产品资料";
     $("reset-product").textContent = editingId ? "取消编辑" : "清空表单";

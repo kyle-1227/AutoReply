@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "AutoReply · 商品评价回复",
-  "version": "0.3.1",
-  "description": "商品评价回复的本机前端演示：产品资料、素材预览、任务控制与待人工清单。",
+  "version": "0.4.1",
+  "description": "读取 TikTok Shop 马来西亚站评价，按商品资料生成并校验回复；保留本机演示，不自动发布。",
   "minimum_chrome_version": "142",
   "permissions": ["sidePanel", "storage", "alarms", "tabs", "scripting"],
   "host_permissions": ["http://*/*", "https://*/*"],
@@ -23,6 +23,6 @@
     "128": "icons/icon-128.png"
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'none'; img-src 'self' blob:; media-src 'self' blob:; connect-src https://openrouter.ai; style-src 'self'; base-uri 'none'"
+    "extension_pages": "script-src 'self'; object-src 'none'; img-src 'self' blob: https:; media-src 'self' blob: https:; connect-src https://openrouter.ai; style-src 'self'; base-uri 'none'"
   }
 }

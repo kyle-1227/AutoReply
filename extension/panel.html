@@ -46,17 +46,18 @@
       </section>
 
       <section id="view-tasks" role="tabpanel" aria-labelledby="tab-tasks">
+        <div class="reader-controls"><button id="read-reviews" type="button" class="button secondary" disabled>读取未回复</button><button id="open-settings" type="button" class="button text-button" disabled>生成设置</button><span id="read-summary" role="status"></span></div>
         <section class="task-overview" aria-label="任务进度">
           <div class="stats" aria-label="评价数量">
             <div><span class="stat-label">待处理</span><span id="count-pending" class="stat-value">0</span></div>
-            <div><span class="stat-label">模拟已回复</span><span id="count-replied" class="stat-value">0</span></div>
+            <div><span id="result-count-label" class="stat-label">模拟已回复</span><span id="count-replied" class="stat-value">0</span></div>
             <div><span class="stat-label">待人工</span><span id="count-manual" class="stat-value">0</span></div>
             <div class="processed-stat"><span class="stat-label">已处理</span><span id="progress-value">0/0</span></div>
           </div>
           <div class="progress-row"><div id="task-progress" class="progress" role="progressbar" aria-label="已处理评价" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progress-fill"></div></div><span id="progress-percent">0%</span></div>
         </section>
 
-        <div class="queue-heading"><h2>评价队列</h2><select id="review-filter" aria-label="筛选评价"><option value="all">全部评价</option><option value="pending">待处理</option><option value="replied">已完成</option><option value="manual">待人工</option></select></div>
+        <div class="queue-heading"><h2>评价队列</h2><select id="review-filter" aria-label="筛选评价"><option value="all">全部评价</option><option value="pending">待处理</option><option value="generated">已生成待确认</option><option value="replied">模拟已回复</option><option value="manual">待人工</option></select></div>
 
         <button id="import-legacy" type="button" class="button secondary" hidden>恢复旧版记录</button>
         <div id="recovery-controls" class="recovery-controls" hidden>
@@ -77,7 +78,8 @@
               <h3>当前评价</h3>
               <button id="current-media-button" type="button" class="button text-button current-media-action" data-action="media" title="查看或重新选择素材" hidden><img src="icons/image.svg" class="icon" alt=""><span class="visually-hidden">查看或重新选择素材</span></button>
             </div>
-            <p id="current-text" class="review-text" lang="en"></p>
+            <p id="current-product" class="review-product"></p>
+            <p id="current-text" class="review-text"></p>
             <div id="current-media" class="media-grid compact-media"></div>
             <div id="current-reply-box" class="reply-box" hidden></div>
           </article>
@@ -120,7 +122,9 @@
         <form id="product-form" novalidate>
           <div class="product-field"><label class="field-label" for="product-name">产品名称</label><input id="product-name" type="text" placeholder="输入产品名称" required></div>
           <div class="product-field"><label class="field-label" for="product-sku">产品编号 / SKU</label><input id="product-sku" type="text" placeholder="输入产品编号或 SKU"></div>
-          <div class="product-field"><label class="field-label" for="product-details">产品资料</label><textarea id="product-details" rows="7" placeholder="填写材质、规格、使用方法、注意事项等" required></textarea></div>
+          <div class="product-field"><label class="field-label" for="product-shop-id">关联店铺 ID（可选）</label><input id="product-shop-id" type="text" inputmode="numeric" placeholder="填写平台店铺 ID"></div>
+          <div class="product-field"><label class="field-label" for="product-platform-id">关联商品 ID（可选）</label><input id="product-platform-id" type="text" inputmode="numeric" placeholder="填写平台商品 ID，资料适用于该商品"></div>
+          <div class="product-field"><label class="field-label" for="product-details">产品公共资料</label><textarea id="product-details" rows="7" placeholder="填写适用于全部规格的材质、使用方法、注意事项等" required></textarea></div>
           <p id="product-error" class="inline-error" role="alert" hidden></p>
           <div class="form-actions"><button id="save-product" type="submit" class="button primary" disabled>保存产品资料</button><button id="reset-product" type="button" class="button secondary">清空表单</button></div>
         </form>
@@ -139,6 +143,18 @@
     </dialog>
 
     <dialog id="media-dialog" aria-labelledby="media-dialog-title"><div class="card-heading"><h2 id="media-dialog-title">评价素材</h2><button type="button" class="button text-button" data-close="media-dialog">关闭</button></div><div id="dialog-media" class="media-grid"></div><button id="reselect-button" type="button" class="button secondary">重新选择附件</button></dialog>
+    <dialog id="settings-dialog" aria-labelledby="settings-title">
+      <form id="settings-form"><h2 id="settings-title">生成设置</h2>
+        <div class="product-field"><label class="field-label" for="generation-key">API Key</label><input id="generation-key" type="password" autocomplete="off" spellcheck="false"><label class="checkbox-label"><input id="clear-key" type="checkbox">移除已保存的 Key</label></div>
+        <div class="product-field"><label class="field-label" for="text-model">文本 / 图片模型</label><input id="text-model" type="text" required></div>
+        <div class="product-field"><label class="field-label" for="video-model">视频模型</label><input id="video-model" type="text" required></div>
+        <div class="product-field"><label class="field-label" for="prompt-id">Prompt 编号</label><input id="prompt-id" type="text" required></div>
+        <div class="product-field"><label class="field-label" for="prompt-version">Prompt 版本</label><input id="prompt-version" type="text" required></div>
+        <div class="product-field"><label class="field-label" for="prompt-text">业务 Prompt</label><textarea id="prompt-text" rows="6" required></textarea></div>
+        <div class="product-field"><label class="checkbox-label"><input id="structured-outputs" type="checkbox">使用端点结构化输出（需模型支持）</label></div>
+        <p id="settings-error" class="inline-error" role="alert" hidden></p><div class="form-actions"><button id="save-settings" type="submit" class="button primary">保存设置</button><button type="button" class="button secondary" data-close="settings-dialog">取消</button></div>
+      </form>
+    </dialog>
     <input id="reselect-input" type="file" accept="image/*,video/*" multiple hidden>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   </body>

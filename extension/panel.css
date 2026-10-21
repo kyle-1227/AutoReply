@@ -226,3 +226,11 @@ dialog .media-card img, dialog .media-card video { height: 150px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; }
 }
+.reader-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 16px var(--gutter); border-bottom: 1px solid var(--line); }
+#read-summary { color: var(--muted); overflow-wrap: anywhere; }
+.review-product { margin-bottom: 10px; color: var(--muted); overflow-wrap: anywhere; }
+.review-provenance { margin: 10px 0; color: var(--muted); }
+.review-provenance p { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 8px; }
+.badge[data-status="generated"] { color: var(--blue); background: #edf4ff; border-color: #d4e3f8; }
+input[type="password"] { display: block; width: 100%; min-height: 42px; padding: 11px 12px; border: 1px solid #ccd3dd; border-radius: 5px; background: var(--paper); color: var(--ink); }
+#settings-form .checkbox-label { margin-top: 12px; }

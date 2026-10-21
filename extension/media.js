@@ -35,7 +35,7 @@ function formatSize(bytes) {
 }
 
 export function mediaKey(attachments) {
-  return attachments.map(item => `${item.id}:${sessionFiles.has(item.id)}`).join(",");
+  return attachments.map(item => `${item.id}:${item.url || sessionFiles.has(item.id)}`).join(",");
 }
 
 function missingPreview(isVideo, error = false) {
@@ -49,29 +49,31 @@ export function renderMedia(container, attachments, onRemove) {
   container.querySelectorAll("video").forEach(video => video.pause());
   container.replaceChildren();
   for (const attachment of attachments) {
-    const entry = sessionFiles.get(attachment.id);
-    const isVideo = attachment.type.startsWith("video/");
+    const entry = sessionFiles.get(attachment.id) || (attachment.url ? { url: attachment.url } : null);
+    const isVideo = attachment.kind === "video" || attachment.type?.startsWith("video/");
+    const label = attachment.name || (isVideo ? "买家视频" : "买家图片");
     const card = element("div", "media-card");
     if (entry) {
       const preview = element(isVideo ? "video" : "img");
       if (isVideo) {
         preview.controls = true;
         preview.preload = "metadata";
-        preview.setAttribute("aria-label", attachment.name);
+        preview.setAttribute("aria-label", label);
       } else {
-        preview.alt = attachment.name;
+        preview.alt = label;
         preview.loading = "lazy";
       }
       preview.addEventListener("error", () => preview.replaceWith(missingPreview(isVideo, true)), { once: true });
       preview.src = entry.url;
+      preview.referrerPolicy = "no-referrer";
       card.append(preview);
     } else {
       card.append(missingPreview(isVideo));
     }
     const meta = element("div", "media-meta");
-    const name = element("p", "media-name", attachment.name);
-    name.title = attachment.name;
-    meta.append(name, element("p", "media-size", `${isVideo ? "视频" : "图片"} · ${formatSize(attachment.size)}`));
+    const name = element("p", "media-name", label);
+    name.title = label;
+    meta.append(name, element("p", "media-size", `${isVideo ? "视频" : "图片"}${Number.isFinite(attachment.size) ? ` · ${formatSize(attachment.size)}` : ""}`));
     card.append(meta);
     if (onRemove) {
       const remove = element("button", "media-remove", "×");

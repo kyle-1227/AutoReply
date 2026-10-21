@@ -47,8 +47,7 @@ function syncWindow(windowId) {
     const tabs = await chrome.tabs.query({ windowId }).catch(() => []);
     await Promise.all(tabs.map(tab => configureTab(tab).catch(() => {})));
     const active = tabs.find(tab => tab.active);
-    const context = coordinator.owner(windowId) || [...coordinator.contexts.values()]
-      .find(item => item.windowId === windowId && item.showCompleted);
+    const context = coordinator.floatingContext(windowId);
     const panels = context ? await chrome.runtime.getContexts({ contextTypes: ["SIDE_PANEL"] }) : [];
     // Edge reports -1 for side-panel tab/window IDs, so compare the trusted URL.
     const visible = context && panels.some(panel => panel.documentUrl === chrome.runtime.getURL(panelPath({ id: context.tabId, windowId })));
@@ -61,6 +60,7 @@ const ready = (async () => {
   if (!chrome.sidePanel.onClosed) throw new Error("请使用 Edge 142 或更新版本；当前版本缺少侧边栏关闭事件。");
   await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
   await chrome.sidePanel.setOptions({ enabled: false });
+  await chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
   await coordinator.initialize();
   const windows = await chrome.windows.getAll({ windowTypes: ["normal"] });
   await Promise.all(windows.map(window => syncWindow(window.id)));
@@ -132,7 +132,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     } catch (error) { respond({ ok: false, error: error.message }); }
     return true;
   }
-  const types = new Set(["HELLO", "COMMAND", "SUSPEND", "PRODUCTS", "BUSY_STATE"]);
+  const types = new Set(["HELLO", "COMMAND", "SUSPEND", "PRODUCTS", "BUSY_STATE", "SETTINGS"]);
   if (!types.has(message?.type)) return;
   const operation = async () => {
     await ready;
@@ -159,6 +159,11 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       if (message.action !== "LIST") chrome.runtime.sendMessage({ type: "PRODUCTS_CHANGED", products, revision }).catch(() => {});
       return { products, revision };
     }
+    if (message.type === "SETTINGS") {
+      const settings = message.action === "SAVE" ? await coordinator.store.saveSettings(message.payload || {}) : coordinator.store.publicSettings();
+      return { settings };
+    }
+    if (message.command === "READ_REVIEWS") return { snapshot: await coordinator.read(context.id, context.taskId) };
     const commands = ["GET_STATE", "START", "PAUSE", "END", "ADD", "SAMPLES", "MANUAL", "ATTACHMENTS", "REMOVE", "CLEAR", "DRAFT", "PRODUCT_DRAFT", "IMPORT_LEGACY", "RESTORE_RECORD"];
     if (!commands.includes(message.command)) throw new Error("无法识别这个操作。");
     return { snapshot: await coordinator.command(context.id, context.taskId, message.command, message.payload) };

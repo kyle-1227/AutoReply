@@ -2,6 +2,8 @@ import { BINDINGS_KEY, counts } from "./model.js";
 import { TaskRunner } from "./task-runner.js";
 import { WorkspaceStore, createRecord } from "./workspace-store.js";
 import { createQueue } from "./queue.js";
+import { readReviews } from "./review-reader.js";
+import { generateReply } from "./reply-generator.js";
 
 export const ordinaryPage = tab => Number.isInteger(tab?.id) && /^https?:\/\//.test(tab.url || "");
 export const panelPath = tab => `panel.html?tabId=${tab.id}&windowId=${tab.windowId}`;
@@ -34,6 +36,8 @@ export class TaskCoordinator {
         }
         continue;
       }
+      context.showFloating = Boolean(context.showFloating || context.showCompleted);
+      delete context.showCompleted;
       this.contexts.set(context.id, context);
       context.occupied = context.occupied && occupiedStatuses.has(record.state.status);
       if (context.occupied && tab.status === "loading" && record.state.status === "running") record.state.status = "recovering";
@@ -66,6 +70,15 @@ export class TaskCoordinator {
           if (!this.restoring) this.enqueue(() => this.changed(taskId)).catch(console.error);
         },
         canProcess: () => this.checkSource(taskId),
+        canRead: () => this.checkReadSource(taskId),
+        readReviews: options => {
+          const context = this.contextForTask(taskId);
+          if (!context) throw new Error("评价来源页已失效。");
+          return (this.runnerOptions.readReviews || readReviews)(context, { browser: this.browser, ...options });
+        },
+        generateReply: (review, options) => (this.runnerOptions.generateReply || generateReply)(review, {
+          ...options, products: this.store.products, settings: this.store.settings,
+        }),
       });
       this.runners.set(taskId, runner);
     }
@@ -75,6 +88,19 @@ export class TaskCoordinator {
   contextForTask(taskId) { return [...this.contexts.values()].find(item => item.taskId === taskId); }
   contextForTab(tabId) { return [...this.contexts.values()].find(item => item.tabId === tabId); }
   owner(windowId) { return [...this.contexts.values()].find(item => item.windowId === windowId && item.occupied); }
+  floatingContext(windowId) {
+    return this.owner(windowId) || [...this.contexts.values()].find(item => item.windowId === windowId && item.showFloating);
+  }
+
+  setPanelVisibility(context, open) {
+    for (const item of this.contexts.values()) {
+      if (item.windowId !== context.windowId) continue;
+      item.showFloating = false;
+      if (open) item.panelOpen = false;
+    }
+    context.panelOpen = open;
+    context.showFloating = !open && this.runner(context.taskId).state.status !== "ended";
+  }
 
   async saveBindings() {
     await this.browser.storage.session.set({ [BINDINGS_KEY]: { contexts: [...this.contexts.values()] } });
@@ -100,8 +126,7 @@ export class TaskCoordinator {
         this.contexts.set(context.id, context);
         await this.runner(record.id).restore();
       }
-      context.panelOpen = true;
-      context.showCompleted = false;
+      this.setPanelVisibility(context, true);
       await this.saveBindings();
       await this.onWindowChange(windowId);
       return this.snapshot(context.id);
@@ -171,16 +196,34 @@ export class TaskCoordinator {
     });
   }
 
+  async read(contextId, taskId) {
+    this.require(contextId, taskId);
+    const runner = this.runner(taskId);
+    await runner.read();
+    this.require(contextId, taskId);
+    this.broadcastWindow(this.contexts.get(contextId).windowId);
+    return this.snapshot(contextId);
+  }
+
+  async checkReadSource(taskId) {
+    const context = this.contextForTask(taskId);
+    if (!context) return false;
+    this.require(context.id, taskId);
+    const tab = await this.browser.tabs.get(context.tabId).catch(() => null);
+    return Boolean(tab && tab.url === context.url && tab.windowId === context.windowId && tab.status === "complete");
+  }
+
   async start(context) {
     const runner = this.runner(context.taskId);
     const owner = this.owner(context.windowId);
     if (owner && owner.id !== context.id) throw new Error("此窗口正在使用，请返回原任务页。");
-    if (!counts(runner.state).pending) throw new Error("请先添加需要自动处理的评价。");
+    if (!counts(runner.state).pending && !(runner.state.mode === "llm" && runner.state.reviewSource)) throw new Error("请先添加需要自动处理的评价。");
+    if (runner.state.mode === "llm" && !this.store.settings.apiKey.trim()) throw new Error("请先在生成设置中保存 API Key。");
     const tab = await this.browser.tabs.get(context.tabId);
     if (tab.windowId !== context.windowId || tab.url !== context.url) throw new Error("来源页面已改变，请在目标页面重新打开插件。");
     const wasOccupied = context.occupied;
     context.occupied = true;
-    context.showCompleted = false;
+    context.showFloating = false;
     if (!wasOccupied) {
       context.originalAutoDiscardable = tab.autoDiscardable ?? true;
       await this.browser.tabs.update(context.tabId, { autoDiscardable: false }).catch(() => {});
@@ -203,7 +246,7 @@ export class TaskCoordinator {
     const tab = await this.browser.tabs.get(context.tabId);
     if (tab.url !== context.url || tab.windowId !== context.windowId) throw new Error("目标页面已改变，请重新打开插件。");
     context.taskId = recordId;
-    context.showCompleted = false;
+    context.showFloating = false;
     record.source = { url: context.url, title: context.title };
     const runner = this.runner(recordId);
     runner.cancelTick();
@@ -214,7 +257,7 @@ export class TaskCoordinator {
 
   async release(context, completed = false) {
     context.occupied = false;
-    context.showCompleted = completed;
+    context.showFloating = completed;
     if (context.originalAutoDiscardable !== null) {
       await this.browser.tabs.update(context.tabId, { autoDiscardable: context.originalAutoDiscardable }).catch(() => {});
       context.originalAutoDiscardable = null;
@@ -295,9 +338,8 @@ export class TaskCoordinator {
   panelVisibility(tabId, open) {
     return this.enqueue(async () => {
       const context = this.contextForTab(tabId);
-      if (!context) return;
-      context.panelOpen = open;
-      if (open) context.showCompleted = false;
+      if (!context || context.panelOpen === open) return;
+      this.setPanelVisibility(context, open);
       await this.saveBindings();
       await this.onWindowChange(context.windowId);
     });

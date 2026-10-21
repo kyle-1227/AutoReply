@@ -21,6 +21,11 @@ export function emptyTask() {
     error: "",
     generation: 0,
     endReason: "",
+    mode: "demo",
+    reviewSource: null,
+    pagination: null,
+    reading: false,
+    callState: null,
   };
 }
 
@@ -48,8 +53,9 @@ export function counts(task) {
     if (review.status === "pending" || review.status === "processing") result.pending += 1;
     if (review.status === "replied") result.replied += 1;
     if (review.status === "manual") result.manual += 1;
+    if (review.status === "generated") result.generated += 1;
     return result;
-  }, { total: 0, pending: 0, replied: 0, manual: 0 });
+  }, { total: 0, pending: 0, replied: 0, generated: 0, manual: 0 });
 }
 
 export function floatingSummary(task) {
@@ -57,7 +63,7 @@ export function floatingSummary(task) {
   return {
     revision: task.revision,
     status: task.status,
-    completed: totals.replied,
+    completed: totals.replied + totals.generated,
     total: totals.total - totals.manual,
     manual: totals.manual,
     error: Boolean(task.error),

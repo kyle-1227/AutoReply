@@ -1,12 +1,12 @@
 {
   "name": "autoreply-extension",
-  "version": "0.3.1",
+  "version": "0.4.1",
   "private": true,
   "type": "module",
   "description": "Edge side panel for product reviews, with no runtime dependencies.",
   "scripts": {
     "check": "node scripts/check.mjs",
-    "test": "node --test tests/llm-client.test.mjs",
+    "test": "node --test tests/llm-client.test.mjs tests/review-workflow.test.mjs",
     "package": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1"
   }
 }
