@@ -1,5 +1,11 @@
 const API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
+function transportError(error, signal) {
+  if (signal.aborted) return signal.reason;
+  if (error instanceof TypeError) error.isNetworkError = true;
+  return error;
+}
+
 /**
  * 发起一次非流式 LLM 请求，返回完整 API JSON。
  * 模型选择、消息组装和响应解释由调用方负责。
@@ -18,21 +24,29 @@ export async function requestLlm({ apiKey, model, messages, parameters = {}, sig
 
   signal?.throwIfAborted();
   const body = JSON.stringify({ ...parameters, model, messages, stream: false });
-  const timeoutSignal = AbortSignal.timeout(timeoutMs);
-  const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
-  const response = await fetch(API_URL, {
+  // 原生 Request 先检查请求构造错误，避免把无效请求误判为断网。
+  const request = new Request(API_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body,
-    signal: requestSignal,
   });
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+  let response;
+  try {
+    response = await fetch(request, { signal: requestSignal });
+  } catch (error) {
+    throw transportError(error, requestSignal);
+  }
 
   let data;
   try {
     data = await response.json();
   } catch (error) {
     // 非 JSON 的错误响应仍保留 HTTP 状态；其余解析、网络、取消或超时错误原样抛出。
-    if (response.ok || !(error instanceof SyntaxError)) throw error;
+    if (requestSignal.aborted || response.ok || !(error instanceof SyntaxError)) {
+      throw transportError(error, requestSignal);
+    }
   }
 
   const apiError = data?.error;
