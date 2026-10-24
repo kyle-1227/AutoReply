@@ -6,6 +6,8 @@
 
 ## 安装与使用
 
+从 [GitHub Releases 的 v0.5.0 发布页](https://github.com/kyle-1227/AutoReply/releases/tag/v0.5.0) 下载 Windows 安装程序和插件 ZIP。安装程序内已附带插件目录；ZIP 用于单独分发或加载扩展。
+
 1. 每台 Windows 10／11 x64 电脑的使用账号安装一次 AutoReply-Setup-0.5.0-win-x64.exe。API Key 可在安装向导填写，也可留空后在插件“模型账户”填写。内置 Node.js 24.14.0，无需另装运行时。
 2. Chrome／Edge 在扩展管理页开启开发者模式，加载直接包含 manifest.json 的文件夹：源码或安装目录中的 extension，或插件 ZIP 的解压目录。
 3. 打开 TikTok Shop MY／SG 商品评分页，点击 AutoReply，读取未回复、维护本店商品资料，再开始生成。
@@ -46,7 +48,7 @@ BitBrowser 两台电脑接手与扩展中心分发需单独验收，不能由单
 
 安装器构建需要 Windows .NET Framework 编译器和 NSIS 3.13，可通过 NSIS_EXE 指定编译器，也会检查系统安装目录和 %LocalAppData%\AutoReplyBuild\tools\nsis。Node 下载后校验固定 SHA-256。扩展身份由公开 manifest.key 固定，签名私钥不提交仓库。
 
-output/ 保存本机验证和构建过程文件，releases/ 保存 EXE／ZIP，均不作为源码提交。仓库不再提供本机 HTTP 服务、商品数据库或手动连接令牌入口。
+output/ 保存本机验证和构建过程文件，releases/ 保存 EXE／ZIP，均不作为源码提交。交付文件通过 GitHub Releases 附件分发。仓库不再提供本机 HTTP 服务、商品数据库或手动连接令牌入口。
 
 - [产品定位](PRODUCT_POSITIONING.md)
 - [当前范围与待验收事项](项目需求文档.md)
