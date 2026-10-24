@@ -1,11 +1,21 @@
 {
   "manifest_version": 3,
   "name": "AutoReply · 商品评价回复",
-  "version": "0.4.1",
-  "description": "读取 TikTok Shop 马来西亚站评价，按商品资料生成并校验回复；保留本机演示，不自动发布。",
+  "version": "0.5.0",
+  "description": "读取 TikTok Shop 马来西亚站／新加坡站评价，按商品资料生成并校验回复；保留本机演示，不自动发布。",
   "minimum_chrome_version": "142",
-  "permissions": ["sidePanel", "storage", "alarms", "tabs", "scripting"],
-  "host_permissions": ["http://*/*", "https://*/*"],
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "alarms",
+    "tabs",
+    "scripting",
+    "nativeMessaging"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -23,6 +33,7 @@
     "128": "icons/icon-128.png"
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'none'; img-src 'self' blob: https:; media-src 'self' blob: https:; connect-src https://openrouter.ai; style-src 'self'; base-uri 'none'"
-  }
+    "extension_pages": "script-src 'self'; object-src 'none'; img-src 'self' blob: https:; media-src 'self' blob: https:; connect-src 'none'; style-src 'self'; base-uri 'none'"
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAj1KDZCf/zGeDjDhScILi8wLcK1kFupgZRGsjxWGHMSavqWuACv17N6wziRNNzTCHIQbz4jcBf05O8Lw2sXVZQoMn6n7qrazoPszov8yo4596FMspMT6w21eHSRcR2dej4Q/bPArwzzUJR/XEVjPREOPLxouF5YKhvrwNTDMj1tXWlEkRGnxTwbaU/zmDj1j9M/fx6rPLiW5Iglr3o7KvFiPmor2V3jW7S34WUEQPffFK4u0QtmczPOi+IgnZlAfy0mMg2MIUBIPRc9kI51ElDiACN7+bHWxrRKkSWKoFXHnNpoIGXL4/aRrBcGN9XhSkiFRg/3Rw7A6b93ElbzxFzQIDAQAB"
 }

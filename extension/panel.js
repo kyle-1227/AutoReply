@@ -1,15 +1,13 @@
-import { counts, MANUAL_REASON, isActive } from "./model.js";
-import { addFiles, releaseFile, releaseAllFiles, renderMedia, mediaKey } from "./media.js";
+import { counts, MANUAL_REASON, isActive, isFinished, emptyTask } from "./model.js";
+import { addFiles, releaseFile, releaseAllFiles, renderMedia } from "./media.js";
 import { initializeProducts } from "./products.js";
 import { $, element, sendMessage } from "./ui.js";
 import { createQueue } from "./queue.js";
 import { isReviewPage } from "./review-reader.js";
-import { initializeGenerationSettings } from "./generation-settings.js";
+import { renderReviews } from "./review-list.js";
 
 const tabs = ["tasks", "add", "manual"];
 const enqueueDraft = createQueue();
-const reviewLabels = { pending: "待处理", generated: "已生成 · 待确认", replied: "模拟已回复", manual: "待人工" };
-const groupLabels = { ...reviewLabels, pending: "剩余评价队列" };
 const runLabels = { idle: "未开始", running: "运行中", paused: "已暂停", recovering: "页面恢复中", completed: "本轮完成", ended: "已结束" };
 
 let state = null;
@@ -24,11 +22,10 @@ let draftWrites = Promise.resolve();
 let controlBusy = false;
 let pauseRequested = false;
 let toastTimer;
-let currentPreviewKey = "";
-let renderedListKey = "";
 let manualReviewId = null;
 let mediaReviewId = null;
 let readBusy = false;
+let savingKey = false;
 
 function notify(message) {
   clearTimeout(toastTimer);
@@ -59,6 +56,13 @@ function applySnapshot(next, restoreDraft = false) {
   if (!changedTask && state && next.state.revision < state.revision) return;
   context = next;
   state = next.state;
+  if (next.expired) {
+    state = emptyTask();
+    loadDraft(); productEditor?.restoreDraft();
+    releaseAllFiles();
+    draftAttachments = [];
+    renderDraftMedia();
+  }
   if (restoreDraft || changedTask) {
     loadDraft(next.draft);
     productEditor?.restoreDraft(next.productDraft);
@@ -66,7 +70,6 @@ function applySnapshot(next, restoreDraft = false) {
   if (changedTask) {
     releaseAllFiles();
     draftAttachments = [];
-    currentPreviewKey = "";
     renderDraftMedia();
   }
   render();
@@ -105,19 +108,29 @@ function renderAccess() {
   $("source-card").hidden = blocked || !context?.source;
   $("open-products").disabled = blocked || !initialized;
   $("suspend-button").disabled = blocked || !initialized;
-  $("open-settings").disabled = blocked || !initialized;
+  $("open-account").disabled = blocked || !initialized;
+  $("save-account").disabled = savingKey || !context?.component?.canSaveKey || (state?.mode === "llm" && isActive(state));
+  $("save-account").textContent = savingKey ? "正在保存…" : "保存 API Key";
+  $("cancel-account").disabled = savingKey;
+  $("account-key").disabled = savingKey;
+  $("account-status").textContent = context?.component?.canSaveKey
+    ? state?.mode === "llm" && isActive(state) ? "请先暂停生成任务，再更新 API Key。"
+      : context.component.status === "ready" ? "当前电脑已配置 API Key。填写新 Key 可替换。" : "当前电脑尚未配置 API Key。"
+    : context?.component?.status === "ready" || context?.component?.status === "missing-key"
+      ? "请先更新本机组件，以支持在插件内保存 API Key。" : context?.component?.message || "正在检查本机组件…";
   $("read-reviews").disabled = blocked || !initialized || readBusy || state?.reading || isActive(state) || !isReviewPage(context?.source?.url);
   $("read-reviews").textContent = state?.reading ? "正在读取…" : "读取未回复";
-  $("read-reviews").title = isReviewPage(context?.source?.url) ? "读取全部评分的未回复评价，不提交店铺回复" : "请在 TikTok Shop 马来西亚站商品评分页打开插件";
+  $("read-reviews").title = isReviewPage(context?.source?.url) ? "读取全部评分的未回复评价，不提交店铺回复" : "请在 TikTok Shop 马来西亚站或新加坡站商品评分页打开插件";
   document.querySelector(".tabs").hidden = blocked || activeTab === "products";
   for (const name of [...tabs, "products"]) $(`view-${name}`).hidden = blocked || name !== activeTab;
   // Keep Pause available while processing; idle forms have their own actions.
   document.querySelector(".control-dock").hidden = blocked ||
     (["add", "products"].includes(activeTab) && !isActive(state) && !state?.reading);
   if (blocked) {
-    $("context-notice-title").textContent = context.busy ? "此窗口正在使用" : "来源页面已改变";
+    $("context-notice-title").textContent = context.busy ? "此窗口正在使用" : context.expired ? "记录已自动清理" : "来源页面已改变";
     $("context-notice-text").textContent = context.busy
       ? "任务仍绑定原评价页。请返回已有任务，或在新窗口开始其他任务。"
+      : context.expired ? "本轮记录已超过保存时间。请在目标网页重新打开插件。"
       : "原任务已结束，记录已保存。请在目标网页点击工具栏的 AutoReply 图标重新打开。";
     $("context-return").hidden = !context.busy;
   } else if (context?.source) {
@@ -133,6 +146,8 @@ function renderAccess() {
 
 function renderRecovery() {
   $("import-legacy").hidden = !context.legacyAvailable || context.bound || state.reviews.length > 0;
+  $("retention-status").hidden = !context.expiresAt || !isFinished(state);
+  $("retention-status").textContent = context.expiresAt ? `本轮记录于 ${new Date(context.expiresAt).toLocaleString()} 自动清理` : "";
   const history = context.history || [];
   $("recovery-controls").hidden = context.bound || !history.length;
   const selected = $("saved-records").value;
@@ -144,167 +159,10 @@ function renderRecovery() {
   if (history.some(record => record.id === selected)) $("saved-records").value = selected;
 }
 
-function renderReply(container, text) {
-  container.hidden = !text;
-  if (!text || container.lastElementChild?.textContent === text) return;
-  const copy = element("p", "", text);
-  container.replaceChildren(element("span", "field-caption", "生成回复"), copy);
-}
-
-function renderCurrent() {
-  const current = state.reviews.find(review => review.id === state.currentId);
-  $("current-card").hidden = !current || pauseRequested || !["all", "pending"].includes($("review-filter").value);
-  if ($("current-card").hidden) $("current-media").querySelectorAll("video").forEach(video => video.pause());
-  if (!current) {
-    if (currentPreviewKey) renderMedia($("current-media"), []);
-    currentPreviewKey = "";
-    return;
-  }
-  $("current-text").textContent = current.text || "这是一条仅包含图片／视频的评价。";
-  $("current-product").textContent = productDescription(current);
-  $("current-product").hidden = !current.platformReview;
-  renderReply($("current-reply-box"), current.reply);
-  $("current-media-button").hidden = !current.attachments.length;
-  $("current-media-button").dataset.id = current.id;
-  const key = `${current.id}:${mediaKey(current.attachments)}`;
-  if (key !== currentPreviewKey) {
-    renderMedia($("current-media"), current.attachments);
-    currentPreviewKey = key;
-  }
-}
-
-function reviewAction(label, action, id) {
-  const button = element("button", "button text-button", label);
-  button.type = "button";
-  button.dataset.action = action;
-  button.dataset.id = id;
-  return button;
-}
-
-function productDescription(review) {
-  const input = review.platformReview;
-  return input ? [input.rating === null ? "评分未知" : `${input.rating} 星`, input.product.title, input.product.variant].filter(Boolean).join(" · ") : "";
-}
-
-function statusBadge(status) {
-  const badge = element("span", "badge", reviewLabels[status]);
-  badge.dataset.status = status;
-  return badge;
-}
-
-function reviewCard(review, number) {
-  const card = element("article", "review-card");
-  card.dataset.reviewId = review.id;
-  if (review.platformReview) {
-    card.append(element("p", "review-product", productDescription(review)));
-    const identity = element("details", "review-provenance");
-    identity.append(element("summary", "", "评价与商品编号"),
-      element("p", "", `店铺 ID：${review.source.shopId}\n评价 ID：${review.platformReview.reviewId}\n商品 ID：${review.platformReview.product.productId}\nSKU ID：${review.platformReview.product.skuId ?? "未知"}`));
-    card.append(identity);
-  }
-  if (number !== undefined) {
-    const heading = element("div", "card-heading");
-    heading.append(element("span", "review-number", `评价 ${String(number).padStart(2, "0")}`), statusBadge(review.status));
-    card.append(heading);
-  }
-  // Pending queue items already show their full text in the expanded summary.
-  if (number !== undefined || review.status !== "pending") {
-    const text = element("p", "review-text", review.text || "仅图片／视频评价");
-    card.append(text);
-  }
-  const actions = element("div", "card-actions");
-  if (review.attachments.length) {
-    actions.append(reviewAction(`${review.attachments.length} 个附件 · 查看素材`, "media", review.id));
-  }
-  if (review.status === "pending") {
-    const buttons = element("div");
-    buttons.append(reviewAction("转人工", "manual", review.id), reviewAction("移除", "remove", review.id));
-    actions.append(buttons);
-  }
-  if (actions.childElementCount) card.append(actions);
-  if (review.reply && ["replied", "generated"].includes(review.status)) {
-    const reply = element("div", "reply-box");
-    renderReply(reply, review.reply);
-    card.append(reply);
-  }
-  if (review.generationRecord) {
-    const record = review.generationRecord, provenance = element("details", "review-provenance");
-    provenance.append(element("summary", "", "生成依据"), element("p", "", `模型：${record.model}\nPrompt：${record.prompt.id} / ${record.prompt.version}\n商品资料：${record.productContext ? `${record.productContext.documentId} / ${record.productContext.version}` : "无，通用回复"}\n引用事实：${record.result.usedFactIds.join("、") || "无"}`));
-    card.append(provenance);
-  }
-  if (review.status === "manual") {
-    const reason = element("div", "manual-reason");
-    reason.append(element("strong", "", "标记原因"), element("span", "", review.manualReason));
-    card.append(reason);
-  }
-  return card;
-}
-
-function queueItem(review, number, open) {
-  const item = element("details", "queue-item");
-  item.dataset.reviewId = review.id;
-  item.dataset.status = review.status;
-  item.open = open;
-  const summary = element("summary", "review-summary");
-  const copy = element("span", "queue-copy");
-  const snippet = element("span", "review-snippet", review.text || "仅图片／视频评价");
-  if (review.status !== "pending") {
-    const meta = element("span", "review-meta");
-    meta.append(statusBadge(review.status), element("span", "review-number", `评价 ${String(number).padStart(2, "0")}`));
-    copy.append(meta);
-  }
-  copy.append(snippet);
-  const chevron = element("img", "icon queue-chevron");
-  chevron.src = "icons/chevron-right.svg";
-  chevron.alt = "";
-  summary.append(copy);
-  if (review.attachments.length) {
-    const count = element("span", "attachment-summary");
-    count.setAttribute("aria-label", `${review.attachments.length} 个附件`);
-    const icon = element("img", "icon");
-    icon.src = "icons/image.svg";
-    icon.alt = "";
-    count.append(icon, document.createTextNode(review.attachments.length));
-    summary.append(count);
-  }
-  summary.append(chevron);
-  item.append(summary, reviewCard(review));
-  return item;
-}
-
-function renderLists() {
-  const filter = $("review-filter").value;
-  const key = JSON.stringify([filter, state.reviews]);
-  if (key === renderedListKey) return; // Keep focus and disclosure state on unchanged snapshots.
-  renderedListKey = key;
-  const expanded = new Set([...$("review-list").querySelectorAll("details[data-review-id][open]")].map(item => item.dataset.reviewId));
-  const groups = { pending: [], generated: [], replied: [], manual: [] }, manual = [];
-  state.reviews.forEach((review, index) => {
-    groups[review.status]?.push(queueItem(review, index + 1, expanded.has(review.id)));
-    if (review.status === "manual") manual.push(reviewCard(review, index + 1));
-  });
-  const sections = [];
-  for (const [status, label] of Object.entries(groupLabels)) {
-    if (filter !== "all" && filter !== status) continue;
-    const items = groups[status];
-    if (filter === "all" && status !== "pending" && !items.length) continue;
-    const section = element("section", "queue-group");
-    section.dataset.reviewGroup = status;
-    const heading = element("h3", "group-heading", label);
-    heading.id = `group-${status}`;
-    heading.append(element("span", "group-count", items.length));
-    section.setAttribute("aria-labelledby", heading.id);
-    section.append(heading, ...(items.length ? items : [element("p", "queue-empty", `暂无${status === "pending" ? "待处理" : label}评价`)]));
-    sections.push(section);
-  }
-  $("review-list").replaceChildren(...sections);
-  $("manual-list").replaceChildren(...manual);
-  $("manual-empty").hidden = manual.length > 0;
-}
-
 function render() {
   if (!state) return;
   const totals = counts(state);
+  $("component-status").textContent = context?.component?.message || "";
   const running = isActive(state) || state.reading;
   const displayStatus = pauseRequested ? "paused" : state.status;
   $("count-pending").textContent = state.reviews.filter(review => review.status === "pending").length;
@@ -333,8 +191,7 @@ function render() {
   $("run-button").textContent = pauseRequested ? "正在暂停…" : running ? "立即暂停" : state.status === "completed" ? "本轮已完成" : action;
   $("run-button").disabled = controlBusy || (!running && !totals.pending && !(state.mode === "llm" && state.status === "paused")) || state.status === "completed";
   $("run-button").setAttribute("aria-label", pauseRequested ? "正在暂停" : running ? "立即暂停当前处理" : $("run-button").textContent);
-  renderCurrent();
-  renderLists();
+  renderReviews(state, pauseRequested);
   renderRecovery();
   renderAccess();
 }
@@ -388,6 +245,39 @@ document.querySelector(".tabs").addEventListener("click", event => {
   if (button) switchTab(button.dataset.tab, true);
 });
 $("open-products").addEventListener("click", () => switchTab("products", true));
+$("open-account").addEventListener("click", () => {
+  $("account-error").hidden = true;
+  $("account-dialog").showModal();
+});
+$("account-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  if (savingKey) return;
+  const input = $("account-key");
+  const apiKey = input.value.trim();
+  if (!apiKey) {
+    $("account-error").textContent = "请填写 API Key。";
+    $("account-error").hidden = false;
+    input.focus();
+    return;
+  }
+  savingKey = true;
+  renderAccess();
+  try {
+    const result = await request("CREDENTIALS", { payload: { apiKey } });
+    context.component = result.component;
+    $("account-dialog").close();
+    notify("API Key 已加密保存在当前电脑。");
+  } catch (error) {
+    $("account-error").textContent = error.message;
+    $("account-error").hidden = false;
+  } finally {
+    input.value = "";
+    savingKey = false;
+    render();
+  }
+});
+$("account-dialog").addEventListener("close", () => { $("account-key").value = ""; });
+$("account-dialog").addEventListener("cancel", event => { if (savingKey) event.preventDefault(); });
 $("products-back").addEventListener("click", () => switchTab(lastReviewTab, true));
 $("suspend-button").addEventListener("click", onAction(async () => {
   $("suspend-button").disabled = true;
@@ -483,7 +373,7 @@ $("restore-record").addEventListener("click", onAction(async () => {
   notify("记录已恢复到此页，点击开始或继续后才会运行。");
 }));
 
-$("review-filter").addEventListener("change", () => { renderCurrent(); renderLists(); });
+$("review-filter").addEventListener("change", () => renderReviews(state, pauseRequested));
 $("review-text").addEventListener("input", saveDraft);
 $("manual-reason").addEventListener("input", saveDraft);
 $("manual-check").addEventListener("change", () => { updateManualField(); saveDraft(); });
@@ -579,8 +469,7 @@ async function initialize() {
   applySnapshot(response.snapshot, true);
   if (context?.contextId) {
     connectPanel();
-    productEditor = await initializeProducts({ notify, request, initialDraft: context.productDraft });
-    initializeGenerationSettings({ request, notify });
+    productEditor = initializeProducts({ notify, request, initialDraft: context.productDraft });
   }
   initialized = true;
   document.querySelectorAll("[data-initializing]").forEach(node => { node.inert = false; });

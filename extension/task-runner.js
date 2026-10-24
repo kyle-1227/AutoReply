@@ -1,4 +1,4 @@
-import { emptyTask, newReview, demoReviews, demoReply, STEP_MS, MANUAL_REASON, isActive } from "./model.js";
+import { emptyTask, newReview, demoReviews, demoReply, STEP_MS, MANUAL_REASON, isActive, isFinished } from "./model.js";
 import { createQueue } from "./queue.js";
 import { reviewIdentity, validateReviewBatch } from "./review-context.js";
 
@@ -15,13 +15,15 @@ export class TaskRunner {
   constructor({ load, save, publish = () => {}, wakeup = async () => {}, now = Date.now,
     setTimer = (callback, delay) => setTimeout(callback, delay),
     clearTimer = timer => clearTimeout(timer), stepMs = STEP_MS, canProcess = async () => true,
-    readReviews, generateReply, canRead = async () => true }) {
-    Object.assign(this, { load, save, publish, wakeup, now, setTimer, clearTimer, stepMs, canProcess, readReviews, generateReply, canRead });
+    readReviews, generateReply, canRead = async () => true, controlRun = async () => {} }) {
+    Object.assign(this, { load, save, publish, wakeup, now, setTimer, clearTimer, stepMs, canProcess, readReviews, generateReply, canRead, controlRun });
     this.state = emptyTask();
     this.enqueue = createQueue();
     this.generation = 0;
     this.timer = null;
     this.work = null;
+    this.controlAbort = null;
+    this.lastControl = "";
     this.needsScan = false;
   }
 
@@ -34,6 +36,7 @@ export class TaskRunner {
     this.state.generation = this.generation;
     this.clearTimer(this.timer);
     this.timer = null;
+    this.controlAbort?.abort();
     this.work?.controller.abort(new DOMException("当前处理已停止。", "AbortError"));
     this.work = null;
     this.state.reading = false;
@@ -63,6 +66,12 @@ export class TaskRunner {
       if (this.state.mode === "llm") this.state.error = "生成任务已恢复为暂停，请确认来源页后继续。";
     }
     if (this.state.status === "running") this.claimNext();
+    if (this.state.mode === "llm" && this.state.reviewSource) {
+      const key = this.lastControl = `${this.generation}:${this.state.status}`;
+      void this.controlRun({ source: this.state.reviewSource, generation: this.generation, status: this.state.status }).catch(() => {
+        if (this.lastControl === key) this.lastControl = "";
+      });
+    }
     await this.commit();
     return this.snapshot();
   }
@@ -85,16 +94,39 @@ export class TaskRunner {
     this.state.nextStepAt = this.now() + (this.state.mode === "llm" ? 0 : this.stepMs);
   }
 
+  async syncRun() {
+    if (this.state.mode !== "llm" || !this.state.reviewSource) return;
+    if (!["running", "recovering", "paused", "ended", "completed"].includes(this.state.status)) return;
+    const key = `${this.generation}:${this.state.status}`;
+    if (key === this.lastControl) return;
+    const controller = new AbortController();
+    this.controlAbort = controller;
+    try {
+      const result = await this.controlRun({ source: this.state.reviewSource, generation: this.generation, status: this.state.status }, controller.signal);
+      if (result?.expiresAt) this.state.expiresAt = result.expiresAt;
+      controller.signal.throwIfAborted();
+      this.lastControl = key;
+    } finally { if (this.controlAbort === controller) this.controlAbort = null; }
+  }
+
   async commit() {
     this.state.revision += 1;
     try {
+      try { await this.syncRun(); }
+      catch (error) {
+        if (isActive(this.state)) throw error;
+        this.state.error ||= "本机处理已停止，组件连接恢复后可继续。";
+      }
       await this.save(this.snapshot());
       await this.wakeup(this.state.status === "running");
     } catch (error) {
       this.cancelTick();
       this.resetCurrent();
       this.state.status = "paused";
-      this.state.error = "本机保存或任务调度失败，已暂停。请重试；空间不足时可先清空本机记录。";
+      this.state.error = error.name === "AbortError" ? "已停止当前操作。" : error.message;
+      // Local cancellation stays immediate even when the backend is unavailable.
+      void this.syncRun().catch(() => {});
+      await this.save(this.snapshot()).catch(() => {});
       this.publish(this.snapshot());
       throw error;
     }
@@ -145,7 +177,9 @@ export class TaskRunner {
   mergeBatch(batch) {
     validateReviewBatch(batch);
     if (this.state.reviewSource && (this.state.reviewSource.shopId !== batch.source.shopId ||
-        this.state.reviewSource.platform !== batch.source.platform)) throw new Error("当前任务的店铺发生变化，请结束任务并清空后重新读取。");
+        this.state.reviewSource.platform !== batch.source.platform || this.state.reviewSource.market !== batch.source.market)) {
+      throw new Error("当前任务的店铺发生变化，请结束任务并清空后重新读取。");
+    }
     if (this.state.mode !== "llm" && this.state.reviews.length) throw new Error("请先清空演示记录，再读取店铺评价。");
     this.state.mode = "llm";
     this.state.reviewSource = structuredClone(batch.source);
@@ -206,7 +240,7 @@ export class TaskRunner {
         this.mergeBatch(batch);
         this.state.reading = false;
         this.state.endReason = "";
-        if (["ended", "completed"].includes(this.state.status)) this.state.status = "idle";
+        if (isFinished(this.state)) this.state.status = "idle";
         await this.commit();
       });
       return this.snapshot();
@@ -250,7 +284,7 @@ export class TaskRunner {
       }
       if (review.retryAt > this.now()) throw Object.assign(new Error(`服务要求等待，请于 ${new Date(review.retryAt).toLocaleTimeString()} 后继续。`), { code: "RETRY_WAIT" });
       const generated = await this.generateReply(structuredClone(review), {
-        source: this.state.reviewSource, signal: work.controller.signal,
+        source: this.state.reviewSource, generation: work.generation, signal: work.controller.signal,
         onStateChange: callState => {
           if (!current()) return;
           void this.enqueue(async () => {
@@ -279,13 +313,13 @@ export class TaskRunner {
       if (!current()) return;
       await this.enqueue(async () => {
         if (!current()) return;
-        const known = ["INPUT_INVALID", "OUTPUT_INVALID", "CONTEXT_INVALID", "MEDIA_UNAVAILABLE", "KEY_MISSING", "RETRY_WAIT", "PAGE_READ_FAILED"];
+        const known = ["INPUT_INVALID", "OUTPUT_INVALID", "CONTEXT_INVALID", "MEDIA_UNAVAILABLE", "KEY_MISSING", "RETRY_WAIT", "PAGE_READ_FAILED", "GENERATION_FAILED"];
         this.cancelTick();
         this.resetCurrent();
         this.state.status = "paused";
         this.state.error = known.includes(error.code) ? error.message : error.status
-          ? `模型请求失败（HTTP ${error.status}），任务已暂停，请检查生成设置后继续。`
-          : "评价读取或模型调用失败，任务已暂停，请检查页面、网络和生成设置后继续。";
+          ? `模型请求失败（HTTP ${error.status}），任务已暂停，请负责人检查模型账户后继续。`
+          : "评价读取或模型调用失败，任务已暂停，请检查页面、网络和本机组件后继续。";
         await this.commit();
       });
     }
@@ -301,6 +335,7 @@ export class TaskRunner {
         case "START":
           if (this.state.status === "running") return this.snapshot();
           this.cancelTick();
+          delete this.state.expiresAt;
           this.state.status = "running";
           this.needsScan = this.state.mode === "llm" && Boolean(this.state.reviewSource);
           this.state.endReason = "";
@@ -311,6 +346,7 @@ export class TaskRunner {
             this.resetCurrent();
             this.state.status = "paused";
           }
+          this.state.error = payload.reason || "";
           break;
         case "RECONNECTING":
           if (this.state.status === "running") {
@@ -320,6 +356,7 @@ export class TaskRunner {
           break;
         case "RECONNECTED":
           if (this.state.status === "recovering") {
+            this.cancelTick();
             this.state.status = "running";
             this.needsScan = this.state.mode === "llm" && Boolean(this.state.reviewSource);
             this.claimNext();
@@ -336,7 +373,7 @@ export class TaskRunner {
           if (type === "ADD" && this.state.mode === "llm" && payload.attachments?.length) throw new Error("手动附件当前用于演示；真实生成请读取店铺评价附件。");
           this.state.reviews.push(...(type === "ADD" ? [newReview(payload)] : demoReviews()));
           this.state.endReason = "";
-          if (["completed", "ended"].includes(this.state.status)) this.state.status = "idle";
+          if (isFinished(this.state)) this.state.status = "idle";
           this.claimNext();
           break;
         case "MANUAL": {
@@ -358,12 +395,18 @@ export class TaskRunner {
           this.state.reviews = this.state.reviews.filter(item => item.id !== review.id);
           break;
         }
-        case "CLEAR":
+        case "CLEAR": {
           if (isActive(this.state)) throw new Error("请先暂停任务，再清空记录。");
+          const paused = this.state.status === "paused";
+          if (this.state.mode === "llm") {
+            this.state.status = "ended";
+            await this.syncRun();
+          }
           this.cancelTick();
           this.state = { ...emptyTask(), revision: this.state.revision, generation: this.generation,
-            status: this.state.status === "paused" ? "paused" : "idle" };
+            status: paused ? "paused" : "idle" };
           break;
+        }
         default:
           throw new Error("无法识别这个操作，请重新打开侧边栏后重试。");
       }

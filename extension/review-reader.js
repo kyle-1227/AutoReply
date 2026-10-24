@@ -1,7 +1,7 @@
 import { validateReviewBatch } from "./review-context.js";
 
 export const isReviewPage = url => {
-  try { const u = new URL(url); return u.origin === "https://seller-my.tiktok.com" && u.pathname === "/product/rating"; }
+  try { const u = new URL(url); return /^https:\/\/seller-(my|sg)\.tiktok\.com$/.test(u.origin) && u.pathname === "/product/rating"; }
   catch { return false; }
 };
 
@@ -30,20 +30,31 @@ export async function observeReviewPage(operationId) {
       if (!response.ok) fail("店铺评价请求失败，请检查登录或网络后重试。");
       const payload = await response.json();
       if (waiter !== active || stopped) return;
-      if (payload.code !== 0 || !Array.isArray(payload.data?.list) ||
+      const list = payload.data?.list ?? (payload.data?.total === 0 ? [] : null);
+      if (payload.code !== 0 || !Array.isArray(list) ||
           !Number.isInteger(payload.data.total) || payload.data.total < 0) fail("店铺未返回完整评价列表，请检查登录或页面加载状态。");
       const shopId = requestUrl.searchParams.get("oec_seller_id");
       if (!shopId) fail("评价数据缺少店铺 ID，已停止读取。");
-      const reviews = payload.data.list.map(item => {
-        // A future video shape must be verified, rather than silently treated as text.
-        if (Object.entries(item).some(([name, value]) => /video/i.test(name) && value && (!Array.isArray(value) || value.length))) {
+      const reviews = list.map(item => {
+        // Accept the verified review_videos shape; unknown media must not be silently dropped.
+        if (Object.entries(item).some(([name, value]) => /video/i.test(name) && !["has_video", "review_videos"].includes(name) &&
+            value && (!Array.isArray(value) || value.length))) {
           fail("发现尚未核实的视频评价字段，已停止读取，请先适配视频样本。");
         }
         if (item.review_images !== undefined && !Array.isArray(item.review_images)) fail("买家图片字段格式已变化。");
+        if (item.review_videos !== undefined && !Array.isArray(item.review_videos)) fail("买家视频字段格式已变化。");
         const images = item.review_images || [];
+        const videos = item.review_videos || [];
         if (images.some(image => Object.entries(image || {}).some(([name, value]) => /video/i.test(name) && value) ||
             typeof image?.mime_type === "string" && image.mime_type.startsWith("video/"))) fail("发现尚未核实的视频附件，已停止读取。");
         if (item.has_imgs && !images.length) fail("评价含有未能读取的图片，已停止读取。");
+        if (item.has_video && !videos.length) fail("评价含有未能读取的视频，已停止读取。");
+        const videoAttachments = videos.map(video => {
+          const url = Array.isArray(video?.video_infos) && video.video_infos.flatMap(info => [info?.main_url, info?.backup_url])
+            .find(value => typeof value === "string" && value.startsWith("https://"));
+          if (!url) fail("评价视频缺少可用的 HTTPS 地址，已停止读取。");
+          return { kind: "video", url };
+        });
         return {
           reviewId: item.main_review_id,
           product: {
@@ -51,12 +62,14 @@ export async function observeReviewPage(operationId) {
             title: item.product_info?.product_name ?? null, variant: item.product_info?.sku_specification ?? null,
           },
           rating: item.star_level ?? null, text: item.review_text,
-          attachments: images.map(image => ({ kind: "image", url: image.url_list?.find(url => typeof url === "string" && url.startsWith("https://")) ?? null })),
+          attachments: [...images.map(image => ({ kind: "image", url: image.url_list?.find(url => typeof url === "string" && url.startsWith("https://")) ?? null })),
+            ...videoAttachments],
           platformReply: { count: item.reply_count, canReply: item.can_reply },
           modifiedAt: item.last_modify_time ?? null,
         };
       });
-      active.resolve({ source: { platform: "tiktok_shop", market: "MY", shopId }, reviews, total: payload.data.total });
+      const market = new URL(originalUrl).hostname.split(".")[0].slice(7).toUpperCase();
+      active.resolve({ source: { platform: "tiktok_shop", market, shopId }, reviews, total: payload.data.total });
     } catch (error) { active.reject(error instanceof SyntaxError ? new Error("店铺返回了无法解析的评价数据，请检查页面状态。") : error); }
   }
 
@@ -102,7 +115,7 @@ export async function observeReviewPage(operationId) {
   }
 
   try {
-    if (!filter()) fail("请打开 TikTok Shop 马来西亚站的商品评分页面。");
+    if (!filter()) fail("请打开 TikTok Shop 马来西亚站或新加坡站的商品评分页面。");
     window.fetch = wrappedFetch;
     const otherFilters = [...document.querySelectorAll('[data-id^="product.rating.filter_"]')]
       .some(node => checked(node) && node !== filter());
@@ -153,7 +166,7 @@ export async function observeReviewPage(operationId) {
 }
 
 export async function readReviews(source, { browser = chrome, signal } = {}) {
-  if (!isReviewPage(source.url)) throw new Error("请在 TikTok Shop 马来西亚站的商品评分页面读取评价。");
+  if (!isReviewPage(source.url)) throw new Error("请在 TikTok Shop 马来西亚站或新加坡站的商品评分页面读取评价。");
   const check = async () => {
     const tab = await browser.tabs.get(source.tabId);
     if (tab.url !== source.url || tab.windowId !== source.windowId || tab.status === "loading") throw new Error("来源页面已改变或正在加载，请稍后重试。");

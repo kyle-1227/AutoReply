@@ -146,12 +146,11 @@ main { padding-bottom: 108px; }
 select { max-width: 145px; min-height: 36px; padding: 6px 9px; border: 1px solid #ccd3dd; border-radius: 5px; background: var(--paper); color: var(--ink); }
 form { margin-top: 22px; }
 .field-label { display: block; margin-bottom: 9px; font-weight: 600; }
-textarea, input[type="text"] { display: block; width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid #ccd3dd; border-radius: 5px; background: var(--paper); color: var(--ink); }
+textarea, input[type="text"], input[type="password"] { display: block; width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid #ccd3dd; border-radius: 5px; background: var(--paper); color: var(--ink); }
 textarea { min-height: 76px; resize: vertical; line-height: 1.75; }
-input[type="text"] { min-height: 42px; }
+input[type="text"], input[type="password"] { min-height: 42px; }
 textarea::placeholder, input::placeholder { color: #7a8491; }
-textarea:focus, input[type="text"]:focus { border-color: var(--blue); }
-[aria-invalid="true"] { border-color: var(--danger); }
+textarea:focus, input[type="text"]:focus, input[type="password"]:focus { border-color: var(--blue); }
 .product-field + .product-field { margin-top: 20px; }
 .product-name { overflow-wrap: anywhere; }
 .product-sku { margin-top: 5px; color: var(--muted); overflow-wrap: anywhere; }
@@ -231,6 +230,4 @@ dialog .media-card img, dialog .media-card video { height: 150px; }
 .review-product { margin-bottom: 10px; color: var(--muted); overflow-wrap: anywhere; }
 .review-provenance { margin: 10px 0; color: var(--muted); }
 .review-provenance p { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 8px; }
-.badge[data-status="generated"] { color: var(--blue); background: #edf4ff; border-color: #d4e3f8; }
-input[type="password"] { display: block; width: 100%; min-height: 42px; padding: 11px 12px; border: 1px solid #ccd3dd; border-radius: 5px; background: var(--paper); color: var(--ink); }
-#settings-form .checkbox-label { margin-top: 12px; }
+.badge[data-status="generated"] { color: var(--blue); background: #edf4ff; }

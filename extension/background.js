@@ -2,6 +2,7 @@ import { WAKE_ALARM } from "./model.js";
 import { TaskCoordinator, ordinaryPage, panelPath } from "./task-coordinator.js";
 import { FloatingController } from "./floating-controller.js";
 import { createQueue } from "./queue.js";
+import { CATALOG_PREFIX } from "./product-catalog.js";
 
 const floating = new FloatingController(chrome);
 const configured = new Map();
@@ -15,9 +16,8 @@ const coordinator = new TaskCoordinator({
 });
 
 async function syncAlarm() {
-  const running = [...coordinator.runners.values()].some(runner => runner.state.status === "running");
-  if (running && !await chrome.alarms.get(WAKE_ALARM)) await chrome.alarms.create(WAKE_ALARM, { periodInMinutes: 0.5 });
-  if (!running) await chrome.alarms.clear(WAKE_ALARM);
+  // Also expires completed records while every panel is closed.
+  if (!await chrome.alarms.get(WAKE_ALARM)) await chrome.alarms.create(WAKE_ALARM, { periodInMinutes: 0.5 });
 }
 
 async function configureTab(tab) {
@@ -132,7 +132,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     } catch (error) { respond({ ok: false, error: error.message }); }
     return true;
   }
-  const types = new Set(["HELLO", "COMMAND", "SUSPEND", "PRODUCTS", "BUSY_STATE", "SETTINGS"]);
+  const types = new Set(["HELLO", "COMMAND", "SUSPEND", "PRODUCTS", "BUSY_STATE", "CREDENTIALS"]);
   if (!types.has(message?.type)) return;
   const operation = async () => {
     await ready;
@@ -144,24 +144,21 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     }
     if (message.type === "HELLO") {
       const identity = panelIdentity(sender, message, true);
-      return { snapshot: await coordinator.open(identity.tabId, identity.windowId) };
+      const snapshot = await coordinator.open(identity.tabId, identity.windowId);
+      void coordinator.checkComponent();
+      return { snapshot };
     }
     const context = panelIdentity(sender, message);
+    if (message.type === "CREDENTIALS") return coordinator.saveKey(context, message.payload);
     if (message.type === "SUSPEND") {
       await chrome.sidePanel.close({ tabId: context.tabId });
       await coordinator.panelVisibility(context.tabId, false);
       return {};
     }
     if (message.type === "PRODUCTS") {
-      const products = message.action === "LIST" ? structuredClone(coordinator.store.products)
-        : await coordinator.store.editProduct(message.action, message.payload || {});
-      const revision = coordinator.store.productRevision;
-      if (message.action !== "LIST") chrome.runtime.sendMessage({ type: "PRODUCTS_CHANGED", products, revision }).catch(() => {});
-      return { products, revision };
-    }
-    if (message.type === "SETTINGS") {
-      const settings = message.action === "SAVE" ? await coordinator.store.saveSettings(message.payload || {}) : coordinator.store.publicSettings();
-      return { settings };
+      const result = await coordinator.products(context, message.action, message.payload || {});
+      if (!["LIST", "EXPORT"].includes(message.action)) chrome.runtime.sendMessage({ type: "PRODUCTS_CHANGED", shop: result.shop }).catch(() => {});
+      return result;
     }
     if (message.command === "READ_REVIEWS") return { snapshot: await coordinator.read(context.id, context.taskId) };
     const commands = ["GET_STATE", "START", "PAUSE", "END", "ADD", "SAMPLES", "MANUAL", "ATTACHMENTS", "REMOVE", "CLEAR", "DRAFT", "PRODUCT_DRAFT", "IMPORT_LEGACY", "RESTORE_RECORD"];
@@ -196,6 +193,13 @@ chrome.alarms.onAlarm.addListener(alarm => {
   if (alarm.name === WAKE_ALARM) afterReady(() => coordinator.wake());
 });
 chrome.runtime.onStartup.addListener(() => ready.catch(console.error));
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local" || !Object.keys(changes).some(key => key.startsWith(CATALOG_PREFIX))) return;
+  afterReady(async () => {
+    await coordinator.catalogChanged(changes);
+    await chrome.runtime.sendMessage({ type: "PRODUCTS_CHANGED" }).catch(() => {});
+  });
+});
 chrome.runtime.onInstalled.addListener(() => ready.catch(console.error));
 chrome.sidePanel.onOpened?.addListener(info => {
   if (Number.isInteger(info.tabId)) afterReady(() => coordinator.panelVisibility(info.tabId, true));

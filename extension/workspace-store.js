@@ -1,59 +1,74 @@
-import { WORKSPACE_KEY, TASK_KEY, DRAFT_KEY, PRODUCTS_KEY, emptyTask } from "./model.js";
+import { WORKSPACE_KEY, TASK_KEY, DRAFT_KEY, RETENTION_MS, emptyTask, isFinished, holdsWindow } from "./model.js";
 import { createQueue } from "./queue.js";
-import { DEFAULT_SETTINGS, SETTINGS_KEY, validateSettings } from "./reply-generator.js";
-import { validateProductContext } from "./review-context.js";
 
-/** Serializes local writes so concurrent windows never replace each other's data. */
 export class WorkspaceStore {
   constructor(storage) {
     this.storage = storage;
     this.data = { version: 2, records: {}, legacyImported: false };
-    this.products = [];
-    this.productRevision = 0;
-    this.settings = structuredClone(DEFAULT_SETTINGS);
     this.enqueue = createQueue();
   }
 
   async load() {
-    const saved = await this.storage.get([WORKSPACE_KEY, PRODUCTS_KEY, TASK_KEY, "autoreply.products-revision.v2", SETTINGS_KEY]);
+    const saved = await this.storage.get([WORKSPACE_KEY, TASK_KEY]);
     if (saved[WORKSPACE_KEY]?.version === 2) this.data = saved[WORKSPACE_KEY];
-    this.products = Array.isArray(saved[PRODUCTS_KEY]) ? saved[PRODUCTS_KEY] : [];
-    this.productRevision = saved["autoreply.products-revision.v2"] || 0;
     this.legacy = saved[TASK_KEY];
-    if (saved[SETTINGS_KEY]) this.settings = { ...this.settings, ...saved[SETTINGS_KEY] };
-  }
-
-  publicSettings() {
-    const { apiKey, ...settings } = this.settings;
-    return { ...structuredClone(settings), hasApiKey: Boolean(apiKey) };
-  }
-
-  saveSettings(payload) {
-    return this.enqueue(async () => {
-      if (payload.previousRevision !== undefined && payload.previousRevision !== (this.settings.revision || 0)) {
-        throw new Error("其他窗口已修改生成设置，请关闭后重新打开再保存。");
+    if (!this.data.retentionMigratedAt) {
+      this.data.retentionMigratedAt = Date.now();
+      for (const record of Object.values(this.data.records)) {
+        if (isFinished(record.state) || record.state.status === "idle") record.expiresAt = Date.now() + RETENTION_MS;
+        this.stripOldPrompts(record);
       }
-      const next = validateSettings({
-        ...this.settings, model: payload.model, videoModel: payload.videoModel,
-        prompt: structuredClone(payload.prompt), structuredOutputs: payload.structuredOutputs,
-        apiKey: payload.clearKey ? "" : typeof payload.apiKey === "string" && payload.apiKey.trim()
-          ? payload.apiKey.trim() : this.settings.apiKey,
-        revision: (this.settings.revision || 0) + 1,
-      });
-      if (next.prompt.id === this.settings.prompt.id && next.prompt.version === this.settings.prompt.version &&
-          next.prompt.text !== this.settings.prompt.text) throw new Error("Prompt 正文已修改，请同时更新版本号。");
-      await this.storage.set({ [SETTINGS_KEY]: next });
-      this.settings = next;
-      return this.publicSettings();
-    });
+      if (this.legacy) this.stripOldPrompts({ state: this.legacy });
+      this.data.legacyExpiresAt = Date.now() + RETENTION_MS;
+      await this.storage.set({ [WORKSPACE_KEY]: this.data, [TASK_KEY]: this.legacy || null });
+    }
+    await this.storage.remove?.(["autoreply.generation.v1", "autoreply.backend.v1"]);
+    await this.cleanup();
+  }
+
+  stripOldPrompts(record) {
+    for (const review of record.state.reviews || []) {
+      const old = review.generationRecord;
+      if (!old) continue;
+      if (old.prompt) old.promptVersion = old.prompt.version;
+      if (old.productContext) old.product = { id: old.productContext.documentId, version: old.productContext.version };
+      delete old.prompt; delete old.productContext; delete old.replyPolicy;
+    }
   }
 
   saveRecord(record) {
     const copy = structuredClone(record);
     return this.enqueue(async () => {
-      const next = { ...this.data, records: { ...this.data.records, [copy.id]: copy } };
-      await this.storage.set({ [WORKSPACE_KEY]: next });
-      this.data = next;
+      const previous = this.data.records[copy.id];
+      if (isFinished(copy.state)) copy.expiresAt = copy.state.expiresAt ||
+        (isFinished(previous?.state) && previous.expiresAt) || Date.now() + RETENTION_MS;
+      else if (holdsWindow(copy.state)) { copy.expiresAt = null; delete copy.state.expiresAt; }
+      else copy.expiresAt = previous?.state.status === "idle" ? copy.expiresAt : Date.now() + RETENTION_MS;
+      this.stripOldPrompts(copy);
+      this.data = { ...this.data, records: { ...this.data.records, [copy.id]: copy } };
+      await this.storage.set({ [WORKSPACE_KEY]: this.data });
+      return copy.expiresAt;
+    });
+  }
+
+  cleanup(now = Date.now()) {
+    return this.enqueue(async () => {
+      const expired = Object.values(this.data.records).filter(record => record.expiresAt && record.expiresAt <= now).map(record => record.id);
+      for (const id of expired) delete this.data.records[id];
+      let changed = expired.length > 0;
+      for (const record of Object.values(this.data.records)) {
+        if (record.draftUpdatedAt && record.draftUpdatedAt + RETENTION_MS <= now) {
+          record.draft = {}; record.productDraft = {}; delete record.draftUpdatedAt; changed = true;
+        }
+      }
+      if (this.data.legacyExpiresAt <= now) {
+        this.legacy = null;
+        await this.storage.remove?.([TASK_KEY, DRAFT_KEY, "autoreply.product-draft.v1"]);
+        delete this.data.legacyExpiresAt;
+        changed = true;
+      }
+      if (changed) await this.storage.set({ [WORKSPACE_KEY]: this.data });
+      return expired;
     });
   }
 
@@ -78,61 +93,8 @@ export class WorkspaceStore {
     });
   }
 
-  editProduct(action, payload) {
-    return this.enqueue(async () => {
-      let next;
-      if (action === "DELETE") {
-        if (!this.products.some(item => item.id === payload.id)) throw new Error("这份产品资料已被删除。");
-        next = this.products.filter(item => item.id !== payload.id);
-      } else if (action === "SAVE") {
-        const product = {
-          id: payload.id || crypto.randomUUID(), name: String(payload.name || "").trim(),
-          sku: String(payload.sku || "").trim(), details: String(payload.details || "").trim(),
-          updatedAt: Date.now(),
-        };
-        if (!product.name || !product.details) throw new Error("请填写产品名称和产品资料。");
-        const previous = this.products.find(item => item.id === product.id);
-        if ([payload.shopId, payload.productId].some(value => value !== undefined && value !== null && typeof value !== "string")) {
-          throw new Error("平台 ID 必须使用字符串，不能使用数字。");
-        }
-        const shopId = String(payload.shopId || "").trim(), productId = String(payload.productId || "").trim();
-        if (Boolean(shopId) !== Boolean(productId) || (shopId && (!/^\d+$/.test(shopId) || !/^\d+$/.test(productId)))) {
-          throw new Error("关联商品时，请同时填写完整的数字店铺 ID 和商品 ID。");
-        }
-        product.binding = shopId ? { platform: "tiktok_shop", shopId, productId } : null;
-        const sameBinding = JSON.stringify(previous?.binding) === JSON.stringify(product.binding);
-        const commonFacts = payload.facts ?? (sameBinding && previous?.details === product.details ? previous?.facts : undefined);
-        if (commonFacts !== undefined) product.facts = structuredClone(commonFacts);
-        product.skuFacts = structuredClone(payload.skuFacts ?? (sameBinding ? previous?.skuFacts : null) ?? []);
-        if (!Array.isArray(product.skuFacts) || product.skuFacts.some(item => typeof item?.skuId !== "string" || !item.skuId.trim() || !Array.isArray(item.facts)) ||
-            new Set(product.skuFacts.map(item => item.skuId)).size !== product.skuFacts.length) throw new Error("SKU 专属资料格式无效。");
-        const facts = product.facts || [{ id: "details", text: product.details }];
-        for (const selected of [facts, ...product.skuFacts.map(item => [...facts, ...item.facts])]) {
-          validateProductContext({ documentId: product.id, version: String(product.updatedAt), facts: selected });
-        }
-        if (product.binding && this.products.some(item => item.id !== product.id &&
-          item.binding?.shopId === shopId && item.binding?.productId === productId && item.binding?.platform === "tiktok_shop")) {
-          throw new Error("该店铺商品已关联资料，请编辑原有资料。");
-        }
-        product.updatedAt = Math.max(product.updatedAt, (previous?.updatedAt || 0) + 1);
-        if (payload.id && !previous) throw new Error("这份产品资料已被删除，请重新添加。");
-        if (previous && (previous.updatedAt || 0) !== (payload.previousUpdatedAt || 0)) {
-          throw new Error("其他窗口已修改这份资料，请重新点击编辑后保存。");
-        }
-        if (product.sku && this.products.some(item => item.id !== product.id && item.sku.toLowerCase() === product.sku.toLowerCase())) {
-          throw new Error("该产品编号 / SKU 已存在，请编辑已有资料或使用其他编号。");
-        }
-        next = previous ? this.products.map(item => item.id === product.id ? product : item) : [...this.products, product];
-      } else throw new Error("无法识别产品资料操作。");
-      const revision = this.productRevision + 1;
-      await this.storage.set({ [PRODUCTS_KEY]: next, "autoreply.products-revision.v2": revision });
-      this.products = next;
-      this.productRevision = revision;
-      return structuredClone(next);
-    });
-  }
 }
 
 export function createRecord(source) {
-  return { id: crypto.randomUUID(), state: emptyTask(), draft: {}, productDraft: {}, source, updatedAt: Date.now() };
+  return { id: crypto.randomUUID(), state: emptyTask(), draft: {}, productDraft: {}, source, updatedAt: Date.now(), expiresAt: Date.now() + RETENTION_MS };
 }
