@@ -23,7 +23,9 @@ async function syncAlarm() {
 async function configureTab(tab) {
   const owner = coordinator.owner(tab.windowId);
   const blocked = owner && owner.tabId !== tab.id;
-  const options = { tabId: tab.id, path: panelPath(tab), enabled: ordinaryPage(tab) && !blocked };
+  // Some Chromium forks close the visible panel when any other tab is disabled.
+  // The toolbar popup and coordinator enforce the window lock instead.
+  const options = { tabId: tab.id, path: panelPath(tab), enabled: ordinaryPage(tab) };
   const popup = blocked ? `busy.html?windowId=${tab.windowId}&taskId=${owner.taskId}` : "";
   const key = JSON.stringify([options, popup]);
   if (configured.get(tab.id) !== key) {
@@ -32,7 +34,7 @@ async function configureTab(tab) {
     configured.set(tab.id, key);
   }
   const state = owner && coordinator.runner(owner.taskId).state;
-  const label = state ? ({ running: "运行", paused: "暂停", recovering: "恢复" }[state.status] || "") : "";
+  const label = owner?.sourceAway ? "等待" : state ? ({ running: "运行", paused: "暂停", recovering: "恢复" }[state.status] || "") : "";
   await chrome.action.setBadgeText({ tabId: tab.id, text: label });
   await chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: state?.status === "running" ? "#386650" : "#8b651b" });
   await chrome.action.setTitle({ tabId: tab.id, title: owner
@@ -52,7 +54,7 @@ function syncWindow(windowId) {
     // Edge reports -1 for side-panel tab/window IDs, so compare the trusted URL.
     const visible = context && panels.some(panel => panel.documentUrl === chrome.runtime.getURL(panelPath({ id: context.tabId, windowId })));
     if (!context || (context.panelOpen && active?.id === context.tabId && visible)) await floating.hide(windowId);
-    else await floating.show(windowId, context.taskId, coordinator.runner(context.taskId).snapshot());
+    else await floating.show(windowId, context.taskId, coordinator.runner(context.taskId).snapshot(), context.sourceAway);
   });
 }
 
@@ -85,9 +87,11 @@ function panelIdentity(sender, message, initial = false) {
     throw new Error("面板缺少来源页，请在目标网页点击工具栏的 AutoReply 图标重新打开。");
   }
   if (!initial) {
-    const context = coordinator.require(message.contextId, message.taskId);
+    if (!Number.isSafeInteger(message.bindingRevision) || message.bindingRevision < 0) throw new Error("页面状态已变化，请重新打开插件。");
+    const draft = message.type === "COMMAND" && ["DRAFT", "PRODUCT_DRAFT"].includes(message.command);
+    const context = coordinator.require(message.contextId, message.taskId, message.bindingRevision, draft);
     if (context.tabId !== tabId || context.windowId !== windowId) throw new Error("这个操作不属于当前页面的任务。");
-    return context;
+    return { ...context, taskId: message.taskId, bindingRevision: message.bindingRevision };
   }
   return { tabId, windowId };
 }
@@ -96,9 +100,11 @@ function returnToSource(taskId, windowId) {
   const context = coordinator.contextForTask(taskId);
   if (!context || context.windowId !== windowId) return Promise.reject(new Error("原任务已结束或来源页已关闭，请重新打开插件。"));
   // Invoke both APIs directly in the click's user gesture; no storage awaits here.
-  const activation = chrome.tabs.update(context.tabId, { active: true });
+  const configuration = chrome.sidePanel.setOptions({ tabId: context.tabId, path: panelPath({ id: context.tabId, windowId }), enabled: true });
+  const activation = chrome.tabs.update(context.tabId, { active: true,
+    ...(context.observedUrl !== context.url ? { url: context.url } : {}) });
   const opening = chrome.sidePanel.open({ tabId: context.tabId });
-  return Promise.all([activation, opening]).then(() => coordinator.panelVisibility(context.tabId, true));
+  return Promise.all([configuration, activation, opening]).then(() => coordinator.panelVisibility(context.tabId, true));
 }
 
 chrome.action.onClicked.addListener(tab => {
@@ -160,10 +166,10 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       if (!["LIST", "EXPORT"].includes(message.action)) chrome.runtime.sendMessage({ type: "PRODUCTS_CHANGED", shop: result.shop }).catch(() => {});
       return result;
     }
-    if (message.command === "READ_REVIEWS") return { snapshot: await coordinator.read(context.id, context.taskId) };
+    if (message.command === "READ_REVIEWS") return { snapshot: await coordinator.read(context.id, context.taskId, context.bindingRevision) };
     const commands = ["GET_STATE", "START", "PAUSE", "END", "ADD", "SAMPLES", "MANUAL", "ATTACHMENTS", "REMOVE", "CLEAR", "DRAFT", "PRODUCT_DRAFT", "IMPORT_LEGACY", "RESTORE_RECORD"];
     if (!commands.includes(message.command)) throw new Error("无法识别这个操作。");
-    return { snapshot: await coordinator.command(context.id, context.taskId, message.command, message.payload) };
+    return { snapshot: await coordinator.command(context.id, context.taskId, message.command, message.payload, context.bindingRevision) };
   };
   return reply(operation(), respond);
 });
@@ -184,7 +190,7 @@ chrome.runtime.onConnect.addListener(port => {
   ready.then(() => {
     const context = coordinator.contexts.get(contextId);
     if (!context || disconnected) return;
-    panelIdentity(port.sender, { contextId, taskId: context.taskId });
+    panelIdentity(port.sender, { contextId, taskId: context.taskId, bindingRevision: context.bindingRevision });
     panelPorts.set(contextId, port);
   }).catch(() => port.disconnect());
 });

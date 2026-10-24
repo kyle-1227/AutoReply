@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AutoReply · 商品评价回复",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "读取 TikTok Shop 马来西亚站／新加坡站评价，按商品资料生成并校验回复；保留本机演示，不自动发布。",
   "minimum_chrome_version": "142",
   "permissions": [

@@ -2,7 +2,7 @@ import { BINDINGS_KEY, RETENTION_MS, counts, isActive, holdsWindow } from "./mod
 import { TaskRunner } from "./task-runner.js";
 import { WorkspaceStore, createRecord } from "./workspace-store.js";
 import { createQueue } from "./queue.js";
-import { readReviews } from "./review-reader.js";
+import { readReviews, isReviewPage } from "./review-reader.js";
 import { generateReply, NativeClient } from "./native-client.js";
 import { ProductCatalog, catalogKey } from "./product-catalog.js";
 
@@ -31,25 +31,26 @@ export class TaskCoordinator {
     const session = (await this.browser.storage.session.get(BINDINGS_KEY))[BINDINGS_KEY];
     for (const context of session?.contexts || []) {
       const tab = await this.browser.tabs.get(context.tabId).catch(() => null);
-      if (!this.records.has(context.taskId)) continue;
       const record = this.records.get(context.taskId);
-      if (!tab || tab.windowId !== context.windowId || tab.url !== context.url) {
-        if (context.occupied) {
+      if (!tab || tab.windowId !== context.windowId) {
+        if (context.occupied && record) {
           record.state.status = "ended";
-          record.state.endReason = "来源页面已关闭、移出原窗口或更换网址，任务已结束。";
+          record.state.endReason = "来源页面已关闭或移出原窗口，任务已结束。";
         }
         continue;
       }
       context.showFloating = Boolean(context.showFloating || context.showCompleted);
       delete context.showCompleted;
       this.contexts.set(context.id, context);
-      context.occupied = context.occupied && holdsWindow(record.state);
-      if (context.occupied && tab.status === "loading" && record.state.status === "running") record.state.status = "recovering";
-      if (context.occupied && tab.status === "complete" && record.state.status === "recovering") record.state.status = "running";
+      context.occupied = Boolean(context.occupied && record && holdsWindow(record.state));
+      if (!context.occupied) await this.selectPage(context, tab);
+      else this.observePage(context, tab);
+      if (context.occupied && !context.sourceAway && tab.status === "loading" && record.state.status === "running") record.state.status = "recovering";
+      if (context.occupied && !context.sourceAway && tab.status === "complete" && record.state.status === "recovering") record.state.status = "running";
     }
     for (const record of this.records.values()) {
       const context = this.contextForTask(record.id);
-      await this.runner(record.id).restore({ newBrowserSession: !context || !context.occupied });
+      await this.runner(record.id).restore({ newBrowserSession: !context || !context.occupied || context.sourceAway });
     }
     this.restoring = false;
     await this.saveBindings();
@@ -118,26 +119,65 @@ export class TaskCoordinator {
     await this.browser.storage.session.set({ [BINDINGS_KEY]: { contexts: [...this.contexts.values()] } });
   }
 
+  observePage(context, tab) {
+    context.bindingRevision ??= 0;
+    context.observedUrl ??= context.url;
+    const ready = ordinaryPage(tab) && tab.status === "complete" && !tab.discarded && !tab.frozen;
+    if (context.observedUrl !== tab.url || (context.pageReady && !ready)) context.bindingRevision++;
+    context.observedUrl = tab.url;
+    context.pageReady = ready;
+    context.sourceAway = Boolean(context.occupied && (tab.url !== context.url || (context.sourceAway && !ready)));
+  }
+
+  async syncBoundPage(context, tab, { departed = false, loading = false } = {}) {
+    const runner = this.runner(context.taskId);
+    this.observePage(context, tab);
+    if (departed || context.sourceAway) {
+      if (isActive(runner.state) || runner.work) await runner.command("PAUSE");
+      else await runner.commit();
+    } else {
+      if (loading && runner.state.status === "running") await runner.command("RECONNECTING");
+      if (context.pageReady && runner.state.status === "recovering") await runner.command("RECONNECTED");
+    }
+  }
+
+  // One live panel, with independent preparation records for its tab's URLs.
+  async selectPage(context, tab) {
+    context.preparations ??= {};
+    if (context.taskId) context.preparations[context.url] = context.taskId;
+    this.observePage(context, tab);
+    if (context.url !== tab.url) {
+      const previous = this.runners.get(context.taskId);
+      if (previous) { previous.cancelTick(); await previous.commit(); }
+    }
+    let record = this.records.get(context.preparations[tab.url]);
+    const attached = record && this.contextForTask(record.id);
+    if (!record || record.source.url !== tab.url || (record.expiresAt && record.expiresAt <= Date.now()) ||
+        (attached && attached.id !== context.id) || isActive(record.state)) {
+      record = createRecord({ url: tab.url, title: tab.title || tab.url });
+      await this.store.saveRecord(record);
+      this.records.set(record.id, record);
+    }
+    if (context.taskId && context.taskId !== record.id && context.url === tab.url) context.bindingRevision++;
+    Object.assign(context, { taskId: record.id, url: tab.url, title: tab.title || tab.url });
+    context.preparations[tab.url] = record.id;
+    if (!this.restoring && !this.runners.has(record.id)) await this.runner(record.id).restore();
+  }
+
   async open(tabId, windowId) {
     return this.enqueue(async () => {
       const tab = await this.browser.tabs.get(tabId).catch(() => null);
-      if (!ordinaryPage(tab) || tab.windowId !== windowId) throw new Error("请在需要处理的普通网页中打开插件。");
+      let context = this.contextForTab(tabId);
+      if (!tab || tab.windowId !== windowId || (!ordinaryPage(tab) && !context?.occupied)) throw new Error("请在需要处理的普通网页中打开插件。");
       const owner = this.owner(windowId);
       if (owner && owner.tabId !== tabId) return { busy: this.busySummary(owner) };
-      let context = this.contextForTab(tabId);
-      if (context && context.url !== tab.url) {
-        await this.detach(context, "来源页面已更换网址，任务已结束。");
-        context = null;
-      }
       if (!context) {
-        const record = createRecord({ url: tab.url, title: tab.title || tab.url });
-        await this.store.saveRecord(record);
-        this.records.set(record.id, record);
-        context = { id: crypto.randomUUID(), taskId: record.id, tabId, windowId, url: tab.url,
+        context = { id: crypto.randomUUID(), taskId: null, tabId, windowId, url: tab.url,
           title: tab.title || tab.url, occupied: false, panelOpen: false, originalAutoDiscardable: null };
         this.contexts.set(context.id, context);
-        await this.runner(record.id).restore();
       }
+      if (!context.occupied) await this.selectPage(context, tab);
+      else await this.syncBoundPage(context, tab);
       this.setPanelVisibility(context, true);
       await this.saveBindings();
       await this.onWindowChange(windowId);
@@ -147,7 +187,7 @@ export class TaskCoordinator {
 
   busySummary(owner) {
     return { taskId: owner.taskId, tabId: owner.tabId, windowId: owner.windowId, url: owner.url,
-      title: owner.title, status: this.runner(owner.taskId).state.status };
+      title: owner.title, status: this.runner(owner.taskId).state.status, sourceAway: Boolean(owner.sourceAway) };
   }
 
   history() {
@@ -164,26 +204,34 @@ export class TaskCoordinator {
     if (!context) throw new Error("这个面板已失效，请在目标页面点击插件图标重新打开。");
     const record = this.records.get(context.taskId);
     const owner = this.owner(context.windowId);
-    return { contextId, taskId: context.taskId, state: this.runner(context.taskId).snapshot(),
+    return { contextId, taskId: context.taskId, bindingRevision: context.bindingRevision,
+      pageReady: context.pageReady && context.observedUrl === context.url && !context.sourceAway,
+      sourceAway: Boolean(context.sourceAway), state: this.runner(context.taskId).snapshot(),
       source: { tabId: context.tabId, windowId: context.windowId, url: context.url, title: context.title },
       bound: context.occupied, valid: true, busy: owner && owner.id !== contextId ? this.busySummary(owner) : null,
       draft: structuredClone(record.draft), productDraft: structuredClone(record.productDraft),
       expiresAt: record.expiresAt, history: this.history(), legacyAvailable: this.store.hasLegacy(), component: { ...this.component } };
   }
 
-  require(contextId, taskId) {
+  require(contextId, taskId, bindingRevision, draft = false) {
     const context = this.contexts.get(contextId);
-    if (!context || context.taskId !== taskId) throw new Error("任务归属已改变，请重新打开插件后重试。");
+    const current = context?.taskId === taskId && (bindingRevision === undefined || context.bindingRevision === bindingRevision);
+    const parked = draft && context && Object.values(context.preparations || {}).includes(taskId) &&
+      (!this.contextForTask(taskId) || this.contextForTask(taskId).id === contextId);
+    if (!context || !this.records.has(taskId) || (!current && !parked) || bindingRevision > context.bindingRevision) {
+      throw new Error("页面或任务归属已改变，请使用当前页面的操作。");
+    }
     const owner = this.owner(context.windowId);
     if (owner && owner.id !== contextId) throw new Error("此窗口正在使用，请返回原任务页。");
     return context;
   }
 
-  command(contextId, taskId, name, payload = {}) {
-    const context = this.require(contextId, taskId);
+  command(contextId, taskId, name, payload = {}, bindingRevision) {
+    const draft = name === "DRAFT" || name === "PRODUCT_DRAFT";
+    const context = this.require(contextId, taskId, bindingRevision, draft);
     if (["PAUSE", "END"].includes(name)) this.runner(taskId).cancelTick();
     return this.enqueue(async () => {
-      this.require(contextId, taskId);
+      this.require(contextId, taskId, bindingRevision, draft);
       const runner = this.runner(taskId);
       switch (name) {
         case "START":
@@ -226,11 +274,13 @@ export class TaskCoordinator {
     });
   }
 
-  async read(contextId, taskId) {
-    this.require(contextId, taskId);
+  async read(contextId, taskId, bindingRevision) {
+    this.require(contextId, taskId, bindingRevision);
+    if (!await this.checkReadSource(taskId)) throw new Error("请在已加载完成的店铺评论页读取评价。");
+    this.require(contextId, taskId, bindingRevision);
     const runner = this.runner(taskId);
     await runner.read();
-    this.require(contextId, taskId);
+    this.require(contextId, taskId, bindingRevision);
     this.broadcastWindow(this.contexts.get(contextId).windowId);
     return this.snapshot(contextId);
   }
@@ -240,7 +290,8 @@ export class TaskCoordinator {
     if (!context) return false;
     this.require(context.id, taskId);
     const tab = await this.browser.tabs.get(context.tabId).catch(() => null);
-    return Boolean(tab && tab.url === context.url && tab.windowId === context.windowId && tab.status === "complete");
+    return Boolean(tab && isReviewPage(tab.url) && tab.url === context.url && tab.windowId === context.windowId &&
+      tab.status === "complete" && !tab.discarded && !tab.frozen);
   }
 
   async start(context) {
@@ -251,6 +302,9 @@ export class TaskCoordinator {
     if (!counts(runner.state).pending && !(runner.state.mode === "llm" && runner.state.reviewSource)) throw new Error("请先添加需要自动处理的评价。");
     const tab = await this.browser.tabs.get(context.tabId);
     if (tab.windowId !== context.windowId || tab.url !== context.url) throw new Error("来源页面已改变，请在目标页面重新打开插件。");
+    if (runner.state.mode === "llm" && (!isReviewPage(tab.url) || tab.status !== "complete" || tab.discarded || tab.frozen)) {
+      throw new Error("请在已加载完成的店铺评论页开始生成。");
+    }
     // Freeze this run's material in memory; it never enters saved task records.
     if (runner.state.mode === "llm") runner.productSnapshot = (await this.catalog.read(runner.state.reviewSource)).products;
     if (runner.generation !== expected) return;
@@ -283,6 +337,8 @@ export class TaskCoordinator {
     const tab = await this.browser.tabs.get(context.tabId);
     if (tab.url !== context.url || tab.windowId !== context.windowId) throw new Error("目标页面已改变，请重新打开插件。");
     context.taskId = recordId;
+    context.bindingRevision++;
+    context.preparations[context.url] = recordId;
     context.showFloating = false;
     record.source = { url: context.url, title: context.title };
     const runner = this.runner(recordId);
@@ -294,10 +350,15 @@ export class TaskCoordinator {
 
   async release(context, completed = false) {
     context.occupied = false;
+    context.sourceAway = false;
     context.showFloating = completed;
     if (context.originalAutoDiscardable !== null) {
       await this.browser.tabs.update(context.tabId, { autoDiscardable: context.originalAutoDiscardable }).catch(() => {});
       context.originalAutoDiscardable = null;
+    }
+    if (this.contexts.has(context.id) && context.observedUrl !== context.url) {
+      const tab = await this.browser.tabs.get(context.tabId).catch(() => null);
+      if (tab && tab.windowId === context.windowId) await this.selectPage(context, tab);
     }
     await this.saveBindings();
   }
@@ -336,13 +397,22 @@ export class TaskCoordinator {
     const invalid = !tab || tab.windowId !== context.windowId || (change.url || tab.url) !== context.url;
     const loading = change.status === "loading" || tab?.discarded || tab?.frozen;
     if (invalid || loading) this.runner(context.taskId).cancelTick();
+    const departed = context.occupied && tab && (change.url || tab.url) !== context.url;
+    if (tab && tab.windowId === context.windowId) this.observePage(context, tab);
     return this.enqueue(async () => {
       if (!this.contexts.has(context.id)) return;
-      if (invalid) await this.detach(context, "来源页面已关闭、移出原窗口或更换网址，任务已结束。");
-      else if (context.occupied) {
-        const runner = this.runner(context.taskId);
-        if (loading && runner.state.status === "running") await runner.command("RECONNECTING");
-        else if (!loading && tab.status === "complete" && runner.state.status === "recovering") await runner.command("RECONNECTED");
+      const latest = tab && await this.browser.tabs.get(tabId).catch(() => null);
+      if (!latest || latest.windowId !== context.windowId) {
+        await this.detach(context, "来源页面已关闭或移出原窗口，任务已结束。");
+      } else if (!context.occupied) {
+        if (invalid || loading) await this.runner(context.taskId).commit();
+        await this.selectPage(context, latest);
+        await this.saveBindings();
+        this.onChange(this.snapshot(context.id));
+      } else {
+        await this.syncBoundPage(context, latest, { departed, loading });
+        await this.saveBindings();
+        this.onChange(this.snapshot(context.id));
       }
       await this.onWindowChange(context.windowId);
     });
@@ -352,11 +422,10 @@ export class TaskCoordinator {
     const runner = this.runner(context.taskId);
     runner.cancelTick();
     if (context.occupied) await runner.command("END", { reason });
-    await this.release(context);
     const snapshot = this.snapshot(context.id);
-    this.onChange({ ...snapshot, valid: false });
     this.contexts.delete(context.id);
-    await this.saveBindings();
+    await this.release(context);
+    this.onChange({ ...snapshot, bound: false, sourceAway: false, valid: false });
     this.broadcastAll();
   }
 
@@ -400,7 +469,7 @@ export class TaskCoordinator {
 
   saveKey(context, payload) {
     return this.enqueue(async () => {
-      this.require(context.id, context.taskId);
+      this.require(context.id, context.taskId, context.bindingRevision);
       if ([...this.runners.values()].some(runner => runner.state.mode === "llm" && isActive(runner.state))) {
         throw new Error("请先暂停本浏览器环境中的生成任务，再更新 API Key。");
       }
@@ -426,7 +495,7 @@ export class TaskCoordinator {
 
   products(context, action, payload = {}) {
     return this.enqueue(async () => {
-      this.require(context.id, context.taskId);
+      this.require(context.id, context.taskId, context.bindingRevision);
       const source = this.runner(context.taskId).state.reviewSource;
       if (!source) {
         if (action !== "LIST") throw new Error("请先读取当前店铺评价。");
@@ -452,23 +521,30 @@ export class TaskCoordinator {
   }
 
   async wake() {
-    const expired = await this.store.cleanup();
-    for (const id of expired) {
-      const context = this.contextForTask(id);
-      if (context) {
-        this.onChange({ ...this.snapshot(context.id), valid: false, expired: true }); this.contexts.delete(context.id);
+    await this.enqueue(async () => {
+      const expired = await this.store.cleanup();
+      for (const id of expired) {
+        this.runners.get(id)?.cancelTick();
+        this.runners.delete(id); this.records.delete(id);
+      }
+      if (expired.length) for (const context of [...this.contexts.values()]) {
+        for (const [url, id] of Object.entries(context.preparations || {})) {
+          if (expired.includes(id)) delete context.preparations[url];
+        }
+        if (!expired.includes(context.taskId)) continue;
+        const tab = await this.browser.tabs.get(context.tabId).catch(() => null);
+        if (!context.occupied && tab && tab.windowId === context.windowId) await this.selectPage(context, tab);
+        else this.contexts.delete(context.id);
         await this.onWindowChange(context.windowId);
       }
-      this.runners.get(id)?.cancelTick();
-      this.runners.delete(id); this.records.delete(id);
-    }
-    if (expired.length) { await this.saveBindings(); this.broadcastAll(); }
-    for (const record of this.records.values()) {
-      const saved = this.store.data.records[record.id];
-      if (record.draftUpdatedAt && !saved.draftUpdatedAt) {
-        record.draft = {}; record.productDraft = {}; delete record.draftUpdatedAt;
+      if (expired.length) { await this.saveBindings(); this.broadcastAll(); }
+      for (const record of this.records.values()) {
+        const saved = this.store.data.records[record.id];
+        if (record.draftUpdatedAt && !saved.draftUpdatedAt) {
+          record.draft = {}; record.productDraft = {}; delete record.draftUpdatedAt;
+        }
       }
-    }
+    });
     await Promise.all([...this.runners.entries()].map(async ([id, runner]) => {
       if (!isActive(runner.state)) {
         await runner.syncRun().catch(() => {});

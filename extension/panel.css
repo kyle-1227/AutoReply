@@ -182,6 +182,7 @@ input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var
 .form-actions .primary { flex: 1; }
 .notice { padding: 12px 14px; margin: 16px var(--gutter); border: 1px solid var(--line); border-radius: 5px; font-size: 14px; line-height: 1.7; }
 .notice-error { border-color: #f0d2cd; background: #fff5f3; color: var(--danger); }
+.source-away { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; background: var(--surface); }
 .inline-error { margin-top: 12px; color: var(--danger); }
 .recovery-controls { margin: 0 var(--gutter) 20px; padding: 15px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
 .recovery-controls select { width: 100%; max-width: none; margin-bottom: 10px; }

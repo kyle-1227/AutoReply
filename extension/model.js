@@ -61,11 +61,12 @@ export function counts(task) {
   }, { total: 0, pending: 0, replied: 0, generated: 0, manual: 0 });
 }
 
-export function floatingSummary(task) {
+export function floatingSummary(task, sourceAway = false) {
   const totals = counts(task);
   return {
     revision: task.revision,
     status: task.status,
+    sourceAway,
     completed: totals.replied + totals.generated,
     total: totals.total - totals.manual,
     manual: totals.manual,

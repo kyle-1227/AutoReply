@@ -1,17 +1,19 @@
 import { $, element, downloadJson } from "./ui.js";
 import { createQueue } from "./queue.js";
 
-export function initializeProducts({ notify, request, initialDraft = {} }) {
+export function initializeProducts({ notify, captureContext, initialDraft = {} }) {
   const form = $("product-form"), enqueueDraft = createQueue();
   let products = [], editingId = null, editingVersion = 0, busy = false, locked = true, shop = null;
-  let draftWrites = Promise.resolve(), refreshId = 0;
+  let draftWrites = Promise.resolve(), refreshId = 0, operationId = 0;
   const fields = { name: "product-name", aliases: "product-aliases", skuNotes: "product-notes", details: "product-details", productIds: "product-platform-id" };
   function values() { return Object.fromEntries(Object.entries(fields).map(([key, id]) => [key, $(id).value])); }
   function saveDraft() {
-    draftWrites = enqueueDraft(() => request("COMMAND", { command: "PRODUCT_DRAFT", payload: { ...values(), editingId, editingVersion } }));
-    draftWrites.catch(() => showError("草稿保存失败，请重试。"));
+    const scope = captureContext(), payload = { ...values(), editingId, editingVersion };
+    draftWrites = enqueueDraft(() => scope.request("COMMAND", { command: "PRODUCT_DRAFT", payload }));
+    draftWrites.catch(() => { try { scope.check(); showError("草稿保存失败，请重试。"); } catch {} });
   }
   function showError(message = "") { $("product-error").textContent = message; $("product-error").hidden = !message; }
+  function failed(error) { if (!error.stalePage) showError(error.message); }
   function controls() {
     for (const node of document.querySelectorAll("#product-form input, #product-form textarea, #product-form button, #product-list button, #legacy-products button")) node.disabled = busy || locked;
     for (const node of $("product-transfer").querySelectorAll("button, input")) node.disabled = busy || locked || !shop;
@@ -43,10 +45,10 @@ export function initializeProducts({ notify, request, initialDraft = {} }) {
     }));
     controls();
   }
-  async function refresh() {
+  async function refresh(scope = captureContext()) {
     const expected = ++refreshId;
     try {
-      const data = await request("PRODUCTS", { action: "LIST" });
+      const data = await scope.request("PRODUCTS", { action: "LIST" });
       if (expected !== refreshId) return;
       if (shop && shop !== data.shop) { restoreDraft(); }
       shop = data.shop; products = data.products; locked = data.locked;
@@ -57,19 +59,20 @@ export function initializeProducts({ notify, request, initialDraft = {} }) {
         button.type = "button"; button.disabled = locked || busy;
         button.addEventListener("click", async () => {
           try { await persist("IMPORT_LEGACY_PRODUCT", { id: item.id }); }
-          catch (error) { showError(error.message); }
+          catch (error) { failed(error); }
         });
         return button;
       }));
     } catch (error) {
-      if (expected !== refreshId) return;
+      if (expected !== refreshId || error.stalePage) return;
       locked = true; controls(); $("products-status").textContent = error.message;
     }
   }
-  async function persist(action, payload) {
+  async function persist(action, payload, scope = captureContext()) {
+    const expected = ++operationId;
     busy = true; controls();
-    try { await request("PRODUCTS", { action, payload }); await refresh(); }
-    finally { busy = false; controls(); }
+    try { await scope.request("PRODUCTS", { action, payload }); await refresh(scope); scope.check(); }
+    finally { if (expected === operationId) { busy = false; controls(); } }
   }
   form.addEventListener("submit", async event => {
     event.preventDefault();
@@ -77,27 +80,28 @@ export function initializeProducts({ notify, request, initialDraft = {} }) {
     try {
       await persist("SAVE", { ...values(), id: editingId, version: editingVersion });
       restoreDraft(); saveDraft(); notify("商品资料已保存。");
-    } catch (error) { showError(error.message); }
+    } catch (error) { failed(error); }
   });
   $("reset-product").addEventListener("click", () => { restoreDraft(); saveDraft(); });
   $("export-products").addEventListener("click", async () => {
     try {
-      const { backup } = await request("PRODUCTS", { action: "EXPORT" });
+      const { backup } = await captureContext().request("PRODUCTS", { action: "EXPORT" });
       downloadJson(backup, `AutoReply-${backup.source.shopId}-products.json`);
-    } catch (error) { showError(error.message); }
+    } catch (error) { failed(error); }
   });
   $("import-products").addEventListener("click", () => $("product-backup").click());
   $("product-backup").addEventListener("change", async event => {
     const file = event.target.files[0]; event.target.value = "";
     if (!file || locked || busy) return;
+    const scope = captureContext();
     try {
       if (file.size > 10 * 1024 * 1024) throw new Error("资料备份不能超过 10 MB。");
       let backup;
       try { backup = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer())); }
       catch { throw new Error("备份不是有效的 UTF-8 JSON 文件。"); }
-      await persist("IMPORT_BACKUP", backup);
+      await persist("IMPORT_BACKUP", backup, scope);
       showError(); notify("本店资料已导入。");
-    } catch (error) { showError(error.message); }
+    } catch (error) { failed(error); }
   });
   $("product-list").addEventListener("click", async event => {
     const button = event.target.closest("[data-action]");
@@ -112,16 +116,18 @@ export function initializeProducts({ notify, request, initialDraft = {} }) {
     try {
       await persist("DELETE", { id: product.id, version: product.version });
       if (editingId === product.id) { restoreDraft(); saveDraft(); }
-    } catch (error) { showError(error.message); }
+    } catch (error) { failed(error); }
   });
   // TXT is plain product material: its name supplies a default title, never hidden instructions.
   $("product-file").addEventListener("change", async event => {
     const file = event.target.files[0]; event.target.value = "";
     if (!file || locked || busy) return;
+    const scope = captureContext();
     try {
       showError();
       if (!/\.txt$/i.test(file.name) || file.size > 400000) throw new Error("请选择不超过 400 KB 的 UTF-8 TXT 文件。");
       const bytes = await file.arrayBuffer();
+      scope.check();
       let text;
       try { text = new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
       catch { throw new Error("文件编码无法识别，请另存为 UTF-8 TXT 后重新导入。"); }
@@ -129,14 +135,21 @@ export function initializeProducts({ notify, request, initialDraft = {} }) {
       $("product-details").value = text;
       if (!$("product-name").value.trim()) $("product-name").value = file.name.replace(/\.txt$/i, "");
       saveDraft();
-    } catch (error) { showError(error.message); }
+    } catch (error) { failed(error); }
   });
   form.addEventListener("input", saveDraft);
   $("open-products").addEventListener("click", () => { locked = true; controls(); void refresh(); });
   chrome.runtime.onMessage.addListener(message => {
     if (message.type === "PRODUCTS_CHANGED" && (!message.shop || message.shop === shop)) void refresh();
-    if (message.type === "STATE_CHANGED" && !$("view-products").hidden) void refresh();
   });
   restoreDraft(initialDraft); controls();
-  return { restoreDraft, async prepareToClose() { if (busy) throw new Error("资料正在保存，请稍后挂起。"); await draftWrites; } };
+  return { restoreDraft, refresh, flushDrafts: () => draftWrites,
+    setContext(draft = {}) {
+      refreshId++; operationId++;
+      products = []; shop = null; locked = true; busy = false;
+      restoreDraft(draft); render();
+      $("legacy-products").replaceChildren();
+    },
+    async prepareToClose() { if (busy) throw new Error("资料正在保存，请稍后挂起。"); await draftWrites; },
+  };
 }

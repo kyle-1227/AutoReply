@@ -18,7 +18,7 @@ export class FloatingController {
 
   hide(windowId) { return this.enqueue(() => this.remove(windowId)); }
 
-  show(windowId, taskId, task) {
+  show(windowId, taskId, task, sourceAway = false) {
     return this.enqueue(async () => {
       const [tab] = await this.browser.tabs.query({ active: true, windowId });
       const previous = this.locations.get(windowId);
@@ -26,7 +26,7 @@ export class FloatingController {
         await this.remove(windowId);
         return false;
       }
-      const message = { taskId, summary: floatingSummary(task) };
+      const message = { taskId, summary: floatingSummary(task, sourceAway) };
       if (previous?.tabId === tab.id && previous.taskId === taskId) {
         try {
           await this.browser.tabs.sendMessage(tab.id, { type: "FLOATING_UPDATE", ...message }, { frameId: 0 });
