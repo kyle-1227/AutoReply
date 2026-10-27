@@ -1,0 +1,520 @@
+================================================================================
+                Amazon Tap Portable Alexa Speaker
+                        P R O D U C T   P R O F I L E
+        A data-driven overview built from 601 verified customer reviews
+================================================================================
+
+DOCUMENT INFORMATION
+--------------------------------------------------------------------------------
+Full product name   Amazon Tap Smart Assistant (Alexa-enabled, black, new)
+Product type        Rechargeable portable smart speaker - an Alexa assistant and
+                    a Bluetooth speaker in one enclosure
+Brand               Amazon
+Release             Launched March 2016 at $129.99; repriced several times and
+                    progressively discontinued from 2017 (buyers note "amazon has
+                    discontinued it" in their reviews)
+Review sample       601 valid reviews
+Date range          April 2016 - January 2019 (concentrated in 2016-2017)
+Overall rating      4.54 / 5.00 (approx. 4.5 stars)
+Compiled on         October 26, 2026
+
+ABOUT THE DATA IN THIS DOCUMENT
+--------------------------------------------------------------------------------
+1. Every conclusion here is derived statistically from the 601 reviews above.
+   None of it is subjective guesswork.
+2. Sample-size caveat: 601 is a small-to-medium sample, so each proportion carries
+   roughly a +/-4 point margin, and some sub-buckets are tiny (only 9 one-star
+   reviews). That is why the negative-feedback section reports raw counts rather
+   than percentages - decimal points would fake a precision this data does not
+   have.
+3. Quotations from reviewers are kept in their original English wording.
+4. Specifications come from the product record and public product documentation.
+   Anything based on what buyers measured or reported (real battery experience,
+   actual street prices) is labeled as such.
+5. The source spreadsheet holds 28,332 reviews in total and also covers
+   AmazonBasics batteries, the Fire HD 8, the Fire 7, Kindle e-readers, and other
+   products. This document uses only the 601 records whose name field contains
+   "Amazon Tap". Everything else was removed.
+
+** READ THIS FIRST - THE SINGLE MOST IMPORTANT FINDING **
+--------------------------------------------------------------------------------
+Reviews of this product look polarized, but the split is not about quality
+control - it is about time:
+  - Early reviews (mostly 2016) repeatedly complain that "you have to press the
+    mic button before Alexa will listen," which they see as defeating the point of
+    a voice assistant.
+  - Later reviews (from May 2017 onward) frequently say an update added
+    hands-free wake-word support, and the scores rise with it. The 2017 average of
+    4.56 is higher than 2016's 4.52.
+In other words, Amazon shipped a software update during 2017 that added a
+hands-free mode to the Tap. If you are looking at a used or clearance unit today,
+whether yours is hands-free depends entirely on the firmware version.
+That single fact decides whether this is "a speaker you have to poke" or "an Echo
+you can carry around."
+
+
+================================================================================
+PART 1  PRODUCT OVERVIEW
+================================================================================
+
+1.1 POSITIONING IN ONE SENTENCE
+--------------------------------------------------------------------------------
+An Echo you can pick up and carry: Alexa packed into a cylindrical speaker with
+about nine hours of battery, lifting off its charging cradle so it can move from
+the bedroom to the bathroom, from the kitchen to the back yard - at the cost, in
+its early firmware, of having to press a button before you speak.
+
+1.2 WHAT THE PRODUCT IS
+--------------------------------------------------------------------------------
+The Amazon Tap was a form-factor experiment from 2016: take Alexa out of the
+"plugged in, sitting on the living-room table" Echo and turn it into a battery-
+powered, movable device that is also a Bluetooth speaker.
+
+Two ideas drive the design:
+  - Portability first: a built-in battery plus a charging cradle, so it runs for
+    hours off the wall and moves anywhere in the house, even outdoors
+  - Two devices in one: with Alexa aside, it is an ordinary Bluetooth speaker -
+    connect a phone and it plays
+
+The biggest difference from the Echo, and the most contested point in the reviews:
+out of the box the Tap was not hands-free. You had to press the microphone button
+before it would listen. Amazon's stated rationale at the time was battery life and
+privacy (no always-on listening). A 2017 software update added an optional
+hands-free mode and largely closed that gap - but by then the hardware was already
+heading off the market.
+
+Reviewers fall into four groups:
+  - Existing Echo owners who wanted a second, movable unit
+  - First-time Alexa buyers on a budget (often around $89 on promotion)
+  - People who wanted better sound than a phone but could carry it outside
+  - Buyers for elderly parents: minimal learning curve, one sentence to play
+    music, opera, or the news
+
+1.3 KEY SELLING POINTS AT A GLANCE (ranked by mention volume)
+--------------------------------------------------------------------------------
+(1) Sound beyond its size ..... 334 reviews mention sound or volume - the top
+                                positive theme.
+(2) Alexa capability .......... 311 reviews mention Alexa; recognition accuracy is
+                                widely praised.
+(3) Portability and battery ... 169 reviews mention battery, portability, or the
+                                cradle; it works untethered.
+(4) Bluetooth speaker too ..... 85 reviews mention Bluetooth; it works as a plain
+                                speaker without Alexa.
+(5) Price and ecosystem ....... 81 reviews mention price; Prime members get direct
+                                access to the music library.
+
+
+================================================================================
+PART 2  SPECIFICATIONS
+================================================================================
+
+2.1 BASIC SPECIFICATIONS
+--------------------------------------------------------------------------------
+Item                  Detail
+--------------------  ----------------------------------------------------------
+Form                  Cylindrical portable speaker; controls and microphones on
+                      the top surface
+Drivers               Dual full-range drivers plus passive radiators (exact
+                      dimensions per official spec)
+Audio processing      Dolby processing; tuned for clear mids and highs and
+                      generous volume
+Battery               Built-in rechargeable lithium battery, rated up to about
+                      9 hours of playback
+Charging              Dedicated charging cradle (drop it in); the cradle doubles
+                      as a display stand
+Connectivity          Dual-band Wi-Fi plus Bluetooth; on Wi-Fi it streams on its
+                      own
+Voice assistant       Alexa (button-activated out of the box; optional
+                      hands-free mode after the 2017 software update)
+Microphone            Top microphone button to start a conversation; physical
+                      play and volume buttons
+Content services      Amazon Music / Prime Music / Pandora / Audible; third-party
+                      services such as Spotify require a paid account (free
+                      accounts do not work)
+Account required      Amazon account sign-in; Prime membership strongly recommended
+                      for the full library
+Hands-free            Depends on firmware (see the note at the top of this file)
+Water resistance      No rating. One buyer reports normal use in a steamy bathroom,
+                      but do not expose it to splashes
+Color                 Black
+Weight/size           Around the 470g class, one-hand portable (per official spec)
+
+2.2 "IT IS NOT AN ECHO" - THE MOST COMMON MISUNDERSTANDING
+--------------------------------------------------------------------------------
+Several reviewers walked into this trap, so it is worth stating plainly:
+  - The Tap is not "an Echo you can move." It wins on portability and sound, but
+    its factory behavior around always-on listening differs from the Echo's.
+  - It does not offer the Echo's native multi-room audio experience, and it has no
+    screen.
+  - It needs Wi-Fi for its full capability. On Bluetooth alone it degrades into an
+    ordinary speaker; Alexa needs the network.
+  In one line: treat it as "a portable speaker with Alexa" and you will be happy.
+  Treat it as "a cheap Echo" and you will not.
+
+2.3 ABOUT DISCONTINUATION
+--------------------------------------------------------------------------------
+The product has been discontinued by Amazon and is no longer sold through official
+channels; reviews from late 2017 already say "amazon has discontinued it." What
+circulates now is clearance stock, used, or refurbished units. That means
+after-sales support and firmware updates may no longer be guaranteed. Buy from a
+channel that accepts returns, and confirm the device can sign in to an account and
+still receive updates.
+
+
+================================================================================
+PART 3  WHAT CUSTOMERS ACTUALLY SAID
+================================================================================
+
+3.1 RATING DISTRIBUTION (601 REVIEWS)
+--------------------------------------------------------------------------------
+Stars        Count      Share      Bar
+---------  --------  ----------  -----------------------------------------
+5 stars         402      66.9%    ##################################
+4 stars         150      25.0%    ############
+3 stars          28       4.7%    ##
+2 stars          12       2.0%    #
+1 star            9       1.5%    .
+---------  --------  ----------
+Total           601     100.0%    Average 4.54
+
+Reading the numbers:
+- Positive reviews (4-5 stars) total 91.9%, a broadly favorable record.
+- But 4-star reviews alone are 25%, and they all stall at the same place: "good
+  product, but you have to press the button." The signature sentence is "sound is
+  great, but you have to press the button."
+- 3 stars and below number only 49 (8.2%). Few in absolute terms, but the
+  criticism is tightly clustered, which makes it highly informative.
+
+3.2 YEAR-BY-YEAR TREND (THIS CURVE IS THE HANDS-FREE STORY)
+--------------------------------------------------------------------------------
+Year      Reviews    Average    1-3 star count
+--------  ---------  ---------  ---------------
+2016            234       4.52               19
+2017            360       4.56               28
+2018              6       3.67                2
+2019              1       5.00                0
+
+The 2017 average (4.56) is higher than 2016's (4.52), on a larger volume of
+reviews. The review text explains why: from May 2017 onward, "it supports
+hands-free now" becomes a recurring line, and a wave of previously hesitant buyers
+finally purchased and rated it well. It is a textbook case of a software update
+rescuing hardware.
+
+3.3 THE FIVE TOP POSITIVE THEMES
+--------------------------------------------------------------------------------
+[THEME 1] Sound that beats its size (334 mentions of sound or volume)
+  The leading positive reason, and the keywords are loud, clear, and fills a small
+  room.
+  - "The sound is very good and fills a small room well with decent levels."
+  - "The sound in this is on par with other high end portable speakers."
+  - "Music sounds great, just make sure you enable alexa hands free so you dont
+     have to hit the button."
+
+[THEME 2] Alexa works, and for some it beats Siri (311 mentions of Alexa)
+  - "I'm an Apple guy so Siri has been my go to virtual assistant. I must say that
+     I am duly impressed with Alexa. She seems to understand me better than Siri
+     does."
+  - "Alexa is very accurate (most of the time) to voice commands."
+
+[THEME 3] Portability and the cradle - the reason it exists (169 mentions)
+  The liveliest writing in the whole data set is people describing where they
+  carried it.
+  - "I love that I can pick it up off the charging cradle and take with me
+     anywhere, like to the shower, kitchen, laundry room, back yard."
+  - "the ability to take this anywhere is a huge bonus."
+
+[THEME 4] It holds up as a Bluetooth speaker (85 mentions)
+  - "As a bluetooth speaker, the Tap rocks! The sound quality is excellent, plenty
+     loud when needed."
+
+[THEME 5] Family use and older users (household members appear throughout)
+  - "I got one for my mom she's 90 years young and she sits and listens to it all
+     day."
+  - "we sit around the table, set the TAP in the middle and we can all have a
+     conversation"
+
+3.4 WHERE THE CRITICISM COMES FROM (49 ONE- TO THREE-STAR REVIEWS, BY COUNT)
+--------------------------------------------------------------------------------
+Cause                        Count   Typical wording
+---------------------------  -----  ---------------------------------------
+Weak bass / thin low end        18   "no bass... focused on treble only"
+Must press a button, not
+  hands-free                    11   "you have to press the mic button
+                                      every time"
+Difficult setup                 11   "spent more time trying to get it
+                                      functioning"
+Wi-Fi / connection drops         6   "it cut in and out constantly"
+Alexa fails to understand        6   "I don't understand the question"
+Battery life / hands-free
+  drain                          6   "battery drains FAST when on hands
+                                      free mode"
+Content gated behind Prime /
+  paid accounts                  4   "you cant use Spotify free account"
+(Note: one review can cite several causes, so the counts sum to more than 49.)
+
+Four details that need to be spelled out:
+(1) "Great sound" and "no bass" are not contradictory. 334 reviews praise the
+    sound while 18 attack the bass. The praise is about volume, clear mids and
+    highs, and being enough for a small room. The criticism is about missing low
+    end and a thin soundstage. One buyer puts it bluntly: "It is focused on treble
+    only. No low end." That is a physical ceiling set by the enclosure, not a
+    fault. If you want real bass, look at a JBL Charge or a Bose SoundLink - one
+    reviewer gave a one-star rating precisely after switching to a JBL.
+(2) Hands-free is the dividing line, and it correlates with date. 11 reviews
+    explicitly complain about pressing the button, and those cluster in 2016 and
+    early 2017. After May 2017 the same feature becomes a selling point. So "bad
+    hands-free experience" is true only of units that were never updated.
+(3) Connection stability comes up repeatedly. Six negative reviews describe music
+    cutting in and out or failing to connect, and one buyer returned it for an
+    Echo Dot over this. Such issues usually trace back to Wi-Fi coverage and router
+    settings - diagnosable, not necessarily a hardware defect.
+(4) The content ecosystem has a gate. The full library experience is tied to
+    Amazon Music and Prime, and Spotify needs a paid account. Some buyers marked
+    it down for this - it is "know before you buy" information rather than a
+    malfunction.
+
+
+================================================================================
+PART 4  USE-CASE GUIDE (BASED ON REAL USE REPORTS)
+================================================================================
+
+4.1 STRONGLY RECOMMENDED: MOVEMENT, VOICE, AND MEDIUM-SIZED ROOMS
+--------------------------------------------------------------------------------
+  - Bathroom, kitchen, laundry room: carry it over and listen while you work (one
+    buyer reports no trouble in a steamy bathroom)
+  - Bedroom and study: a voice assistant plus background music on the nightstand
+  - Balcony, back yard, camping: fully untethered within Wi-Fi range
+  - Family gatherings: on the table as a speakerphone for group calls
+  - Elderly users: one sentence to play music, opera, or the news; almost no
+    learning curve
+  - Podcasts, audiobooks, news briefings: voice-on-demand beats fiddling with a
+    phone
+  - Smart-home voice entry point: control lights and plugs by voice
+  - Homes that already have an Echo: a movable second Alexa
+
+4.2 USE WITH CAUTION: LOWER YOUR EXPECTATIONS
+--------------------------------------------------------------------------------
+  - As the main speaker in a large living room: loud enough, but the soundstage
+    does not fill the space, and the low end is especially thin
+  - Long periods in hands-free standby: drains the battery noticeably faster (a
+    point buyers raise explicitly)
+  - Voice interaction in noisy rooms: you need to be near the microphone
+  - Bluetooth only, no Wi-Fi: Alexa is effectively disabled and it becomes an
+    ordinary speaker
+
+4.3 NOT RECOMMENDED: WHERE DISAPPOINTMENT IS GUARANTEED
+--------------------------------------------------------------------------------
+  - Audiophiles and anyone chasing bass response
+  - Buyers wanting the single main speaker for a living room
+  - Users who rely on a free Spotify account or on Google Assistant
+  - Anyone needing a screen, video calls, or multi-room sync (that is Echo
+    Show / Echo territory)
+  - Buyers who need reliable after-sales support and firmware updates (the product
+    is discontinued)
+
+
+================================================================================
+PART 5  COMPETITOR COMPARISON (FROM COMPARATIVE COMMENTS IN REVIEWS)
+================================================================================
+
+Compared with        Mentions   What reviewers generally conclude
+-------------------  ---------  ---------------------------------------------
+Echo (1st gen)            167    Less full-bodied than the Echo, but it moves;
+                                 clearly behind on hands-free before the update
+Echo Dot / Dot             52    Better portability and sound (the Dot needs
+                                 external speakers to be heard at all), but the
+                                 Dot is cheaper and better as a stereo add-on
+Bose                        7    Bose sounds better, at several times the price
+JBL (Charge series)         4    Stronger bass and outdoor suitability; at least
+                                 one buyer rated this down after switching
+Google Home                 2    Google Assistant seen as smarter, different
+                                 ecosystem
+Sonos / UE Boom           1+1    Too few mentions to draw conclusions
+
+In one line: the Tap occupied a unique slot - it was one of very few
+battery-powered Alexa devices on the market. Do not compare its sound to an Echo,
+its bass to a JBL, or its price to a Dot. Its entire value is in the one thing it
+does that they cannot: you can pick it up and walk away.
+
+
+================================================================================
+PART 6  SETUP AND CARE
+================================================================================
+
+6.1 YOUR FIRST 20 MINUTES
+--------------------------------------------------------------------------------
+1. Install the Alexa app on your phone and sign in with your Amazon account -
+   this is the only setup path.
+2. Seat the Tap on its charging cradle and charge it fully before first use.
+3. Join Wi-Fi through the app. A 2.4GHz network is the safest bet for
+   compatibility and range.
+4. The critical step: open the device settings in the app and turn on hands-free
+   wake word. If the option is not there, update the firmware first - this is the
+   dividing line for the whole experience.
+5. Try three commands: ask for the weather, play a song, set an alarm. If those
+   three work, you are set up.
+
+6.2 EVERYDAY TIPS
+--------------------------------------------------------------------------------
+- Say the wake word, then keep the sentence short. "Alexa, play jazz" succeeds more
+  often than a long request.
+- Hands-free mode drains the battery noticeably faster; switch back to button mode
+  to save power.
+- Tuning: flatten the EQ at low volume for a more comfortable mid and high range,
+  and do not expect it to manufacture bass.
+- Placement matters. A corner or a tabletop reinforces low frequencies; open space
+  gives cleaner sound. Try a few spots.
+- On Bluetooth, Alexa's network features are unavailable - do not mistake that for
+  a fault.
+- With several Alexa devices in one room, avoid triggering two at once.
+
+6.3 BATTERY AND HARDWARE CARE
+--------------------------------------------------------------------------------
+- Keep it on the cradle day to day; shallow charge cycles age a lithium battery
+  less than deep discharge.
+- Avoid long periods at full charge in high heat (a sunlit windowsill, for
+  example).
+- No water-resistance rating: bathroom use is fine, but keep it out of splash
+  range.
+- For long storage, shut down at around 50% and top it up every three months.
+- Wipe with a dry or slightly damp cloth; never spray alcohol into the microphone
+  openings.
+
+6.4 CHECKLIST BEFORE BUYING USED OR CLEARANCE STOCK
+--------------------------------------------------------------------------------
+(1) Can it sign in and bind to an Amazon account? (A failed bind can mean the
+    previous owner did not deregister it.)
+(2) Can it update to the latest firmware? (This decides whether you get
+    hands-free.)
+(3) Real battery runtime (rated 9 hours; older units often manage 4-5).
+(4) Is the charging cradle original? It is a proprietary part and hard to replace.
+(5) Does the Wi-Fi module hold a connection? Repeated drops are a common sign of
+    aging.
+
+
+================================================================================
+PART 7  FREQUENTLY ASKED QUESTIONS
+================================================================================
+
+Q1: Do I need Prime to use it?
+A: No. Basic functions - weather, alarms, news, smart-home control - work without
+   it. But Prime Music makes the music experience much better, and third-party
+   services like Spotify require a paid account.
+
+Q2: Is it hands-free or not?
+A: It depends on firmware. The shipping version required a button press; a software
+   update around May 2017 added an optional hands-free mode. Before buying used,
+   confirm it can update and check whether the setting exists.
+
+Q3: Can it work as a normal Bluetooth speaker?
+A: Yes, and reviewers rate it well for that. Pair a phone and play local music -
+   though Alexa's network features are unavailable in that mode.
+
+Q4: How does the sound compare with an Echo?
+A: Enough volume and clarity, but not as full-bodied as the first-generation Echo,
+   and notably thin in the low end. Fine for small rooms, spoken word, podcasts,
+   and pop. Disappointing for bass-heavy music or large spaces.
+
+Q5: Can I take it outside? How long does the battery last?
+A: Yes. Built-in battery plus charging cradle, rated about 9 hours; older units may
+   manage 4-6. It needs Wi-Fi coverage to be an Alexa device.
+
+Q6: Can I connect it to a TV or an external stereo?
+A: The Tap is a self-contained speaker built around its own drivers. If you want to
+   feed a stereo system, an Echo Dot is the better choice.
+
+Q7: Can I still buy it new? What about support?
+A: It is discontinued and no longer sold officially; most units on the market are
+   clearance or used. Prefer channels that accept returns - firmware updates and
+   support may no longer be guaranteed.
+
+Q8: Is it worth buying?
+A: Depends what you want. For "an Alexa I can carry around," it has almost no
+   substitute and is worth it. For "the best sound" or "the cheapest Alexa," it is
+   neither - look at JBL/Bose or an Echo Dot.
+
+
+================================================================================
+PART 8  HEADLINE COPY / LISTING-READY TEXT
+================================================================================
+
+MAIN HEADLINE
+  Alexa you can carry: nine hours of battery, from the bedroom to the bathroom,
+  from the kitchen to the back yard.
+
+SUBHEADLINE
+  More than a speaker - a voice assistant that follows you around. Just press the
+  button once, or update it to the hands-free build.
+
+THREE SHORT BULLETS
+  - 91.9% positive and 4.5 stars: the shared verdict of 601 buyers
+  - Two devices in one: Alexa assistant plus a plain Bluetooth speaker that still
+    plays when Wi-Fi drops
+  - Drop-in charging cradle: hours off the wall, free to move anywhere in the house
+
+ONE HONEST DISCLAIMER (credibility, not a weakness)
+  Discontinued, light on bass, and hands-free depends on firmware - confirm all
+  three before you buy.
+
+
+================================================================================
+APPENDIX  TWELVE REPRESENTATIVE REVIEWS
+================================================================================
+
+[POSITIVE]
+
+1. ***** "With the new update allowing hands-free 'Hey Alexa' commands, this is a
+   great device. The battery allows you to disconnect from the wall. The sound is
+   very good and fills a small room well."
+
+2. ***** "I love that I can pick it up off the charging cradle and take with me
+   anywhere, like to the shower, kitchen, laundry room, back yard, or anywhere
+   within wifi range."
+
+3. ***** "I'm an Apple guy so Siri has been my go to virtual assistant. I must say
+   that I am duly impressed with Alexa. She seems to understand me better than Siri
+   does."
+
+4. ***** "As a bluetooth speaker, the Tap rocks! The sound quality is excellent,
+   plenty loud when needed, and excellent quality with no stutters in streaming."
+
+5. ***** "I got one for my mom she's 90 years young and she sits and listens to it
+   all day."
+
+6. ***** "Now that this supports hands free access and amazon has discontinued it
+   this is the last chance to get a battery operated echo device." (This single
+   review confirms both the hands-free update and the discontinuation.)
+
+[NEGATIVE / CAUTIONARY]
+
+7. *---- "We were so excited to get the tap since it was a larger speaker than the
+   dot... When listening to online radio on the tap it cut in and out constantly.
+   We returned it and exchanged for the dot."
+
+8. **--- "While it seemed to work fine, the Tap does not have the open mic
+   feature... makes you press the mic button every time you wish to communicate
+   with Alexa, which seems to defeat the purpose."
+
+9. ***-- "It has no bass. If you want something that has a good range of sound, this
+   isn't it. It is focused on treble only. I ended up getting the JBL Charge 3."
+
+10. ***-- "The product works well. However, you have to hold down the button to use
+    the best part of the device, Alexa... but the sound quality of this product is
+    just so dog on awesome!!"
+
+11. **--- "You cant use Spotify free account, to work around you must add a lot of
+    free music to Amazon music into your own amazon music account."
+
+12. ***-- "I also have an Echo and I don't have the same connectivity issues with it
+    that I do with this."
+
+
+================================================================================
+                                 -- END --
+================================================================================
+
+Data note: every statistic in this document is based on the 601 records in the
+review spreadsheet whose name field contains "Amazon Tap". Ratings come from the
+reviews.rating field and dates from the reviews.date field (April 2016 to January
+2019). The sample is limited, so the proportions describe this sample only and are
+not a proxy for overall market sentiment.

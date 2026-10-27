@@ -1,0 +1,863 @@
+================================================================================
+                Amazon Tap Portable Alexa Speaker
+                        P R O D U C T   P R O F I L E
+        A data-driven overview built from 601 verified customer reviews
+（Amazon Tap 便携式 Alexa 智能音箱
+                   产 品 资 料 介 绍
+        —— 基于 601 条真实买家评价的数据化整理）
+================================================================================
+
+DOCUMENT INFORMATION（文档信息）
+--------------------------------------------------------------------------------
+Full product name   Amazon Tap Smart Assistant (Alexa-enabled, black, new)
+Product type        Rechargeable portable smart speaker - an Alexa assistant and
+                    a Bluetooth speaker in one enclosure
+Brand               Amazon
+Release             Launched March 2016 at $129.99; repriced several times and
+                    progressively discontinued from 2017 (buyers note "amazon has
+                    discontinued it" in their reviews)
+Review sample       601 valid reviews
+Date range          April 2016 - January 2019 (concentrated in 2016-2017)
+Overall rating      4.54 / 5.00 (approx. 4.5 stars)
+Compiled on         October 26, 2026
+
+（产品全名    Amazon Tap Smart Assistant（Alexa-enabled，黑色，全新）
+产品类型    可充电便携式智能音箱（Alexa 语音助手 + 蓝牙音箱二合一）
+品牌        Amazon（亚马逊）
+发布信息    2016 年 3 月上市，指导价 $129.99；后经历多次降价，
+            2017 年起逐步退市（评价中有买家明确提到 "amazon has discontinued it"）
+评价样本     601 条有效评价
+时间跨度     2016 年 4 月 — 2019 年 1 月（集中在 2016—2017 年）
+综合评分     4.54 / 5.00（约 4.5 星）
+整理日期     2026 年 10 月 26 日）
+
+ABOUT THE DATA IN THIS DOCUMENT
+（关于本文的数据说明）
+--------------------------------------------------------------------------------
+1. Every conclusion here is derived statistically from the 601 reviews above.
+   None of it is subjective guesswork.
+2. Sample-size caveat: 601 is a small-to-medium sample, so each proportion carries
+   roughly a +/-4 point margin, and some sub-buckets are tiny (only 9 one-star
+   reviews). That is why the negative-feedback section reports raw counts rather
+   than percentages - decimal points would fake a precision this data does not
+   have.
+3. Quotations from reviewers are kept in their original English wording.
+4. Specifications come from the product record and public product documentation.
+   Anything based on what buyers measured or reported (real battery experience,
+   actual street prices) is labeled as such.
+5. The source spreadsheet holds 28,332 reviews in total and also covers
+   AmazonBasics batteries, the Fire HD 8, the Fire 7, Kindle e-readers, and other
+   products. This document uses only the 601 records whose name field contains
+   "Amazon Tap". Everything else was removed.
+
+（1. 本文所有结论均由上述 601 条评价原文统计得出，不是主观推测。
+2. 样本量提示：601 条属于中小样本，各项占比的误差范围约为 ±4 个百分点，
+   个别细分项的绝对条数很少（如 1 星仅 9 条），因此本文在"差评归因"一节
+   采用"条数"而非"百分比"呈现，避免用小数制造虚假的精确感。
+3. 文中引用的用户原声保留英文原文，并附中文译文，方便核对。
+4. 规格参数中属于产品档案的信息来自产品记录与公开资料；凡属"用户实测/用户口述"
+   的数据（如实际续航感受、实际成交价）均单独标注。
+5. 原始表格共 28,332 条评价，除 Amazon Tap 外还包含 AmazonBasics 电池、Fire HD 8
+   平板、Fire 7 平板、Kindle 阅读器等多款产品。本文只采用名称含 "Amazon Tap" 的
+   601 条，其余已全部剔除。）
+
+** READ THIS FIRST - THE SINGLE MOST IMPORTANT FINDING **
+（★★ 阅读本文前请先看这一条（最重要的发现）★★）
+--------------------------------------------------------------------------------
+Reviews of this product look polarized, but the split is not about quality
+control - it is about time:
+  - Early reviews (mostly 2016) repeatedly complain that "you have to press the
+    mic button before Alexa will listen," which they see as defeating the point of
+    a voice assistant.
+  - Later reviews (from May 2017 onward) frequently say an update added
+    hands-free wake-word support, and the scores rise with it. The 2017 average of
+    4.56 is higher than 2016's 4.52.
+In other words, Amazon shipped a software update during 2017 that added a
+hands-free mode to the Tap. If you are looking at a used or clearance unit today,
+whether yours is hands-free depends entirely on the firmware version.
+That single fact decides whether this is "a speaker you have to poke" or "an Echo
+you can carry around."
+（这款产品在评价里呈现出明显的"两极"现象，但两极不是因为品控，而是因为时间：
+  · 早期评价（2016 年为多）：反复抱怨"必须先按一下麦克风键，Alexa 才理你"，
+    认为这违背了语音助手的意义。
+  · 后期评价（2017 年 5 月起）：大量出现"更新之后可以免提唤醒了"的说法，
+    评分随之走高——2017 年均分 4.56，高于 2016 年的 4.52。
+也就是说：亚马逊在 2017 年通过软件更新给 Tap 补上了免提（hands-free）模式。
+如果你现在看到的是二手或库存机，它能不能免提，取决于系统版本是否更新到位。
+这一点决定了这台设备是"一个需要用手戳的音箱"还是"一台能带出门的 Echo"。
+）
+
+
+================================================================================
+PART 1  PRODUCT OVERVIEW（第一部分  产品概览）
+================================================================================
+
+1.1 POSITIONING IN ONE SENTENCE（一句话定位）
+--------------------------------------------------------------------------------
+An Echo you can pick up and carry: Alexa packed into a cylindrical speaker with
+about nine hours of battery, lifting off its charging cradle so it can move from
+the bedroom to the bathroom, from the kitchen to the back yard - at the cost, in
+its early firmware, of having to press a button before you speak.
+（一台"能拎着走的 Echo"：把 Alexa 塞进一个约 9 小时续航的圆柱形音箱里，
+充电底座一拔就能从卧室提到浴室、从厨房拎到阳台，代价是——早期的它，
+每次说话都得先用手按一下。）
+
+1.2 WHAT THE PRODUCT IS（产品是什么）
+--------------------------------------------------------------------------------
+The Amazon Tap was a form-factor experiment from 2016: take Alexa out of the
+"plugged in, sitting on the living-room table" Echo and turn it into a battery-
+powered, movable device that is also a Bluetooth speaker.
+（Amazon Tap 是亚马逊在 2016 年做的一次形态实验：把 Alexa 语音助手从"插着电、
+放在客厅桌上"的 Echo，改造成"带电池、可移动、同时还是个蓝牙音箱"的便携设备。）
+
+Two ideas drive the design:
+  - Portability first: a built-in battery plus a charging cradle, so it runs for
+    hours off the wall and moves anywhere in the house, even outdoors
+  - Two devices in one: with Alexa aside, it is an ordinary Bluetooth speaker -
+    connect a phone and it plays
+（它的核心设计逻辑有两点：
+  · 便携优先：内置电池 + 充电底座，脱离插座可用数小时，可在全屋甚至院子里移动
+  · 一机两用：不连 Alexa 时，它就是一台普通蓝牙音箱，手机连上就能放歌）
+
+The biggest difference from the Echo, and the most contested point in the reviews:
+out of the box the Tap was not hands-free. You had to press the microphone button
+before it would listen. Amazon's stated rationale at the time was battery life and
+privacy (no always-on listening). A 2017 software update added an optional
+hands-free mode and largely closed that gap - but by then the hardware was already
+heading off the market.
+(与 Echo 最大的差别（也是评价中最集中的争议点）：Tap 出厂时不是免提唤醒的，
+必须先按下麦克风键才能对话。亚马逊官方当时的解释是省电与隐私（不常驻监听）。
+2017 年的一次软件更新加入了可选的免提模式后，这个短板基本被补上，
+但设备本身已经进入退市周期。)
+
+Reviewers fall into four groups:
+  - Existing Echo owners who wanted a second, movable unit
+  - First-time Alexa buyers on a budget (often around $89 on promotion)
+  - People who wanted better sound than a phone but could carry it outside
+  - Buyers for elderly parents: minimal learning curve, one sentence to play
+    music, opera, or the news
+(从评价看，买它的人主要有四类：
+  · 已有 Echo、想要一台能移动的补充设备
+  · 想尝鲜 Alexa 但预算有限（常在促销时 $89 左右入手）
+  · 需要一台"音质比手机好、又能带出门"的蓝牙音箱
+  · 给长辈用：操作极简，一句话就能放戏、放歌、听新闻)
+
+1.3 KEY SELLING POINTS AT A GLANCE (ranked by mention volume)
+(核心卖点速览（按评价提及热度排序）)
+--------------------------------------------------------------------------------
+(1) Sound beyond its size ..... 334 reviews mention sound or volume - the top
+                                positive theme.
+(2) Alexa capability .......... 311 reviews mention Alexa; recognition accuracy is
+                                widely praised.
+(3) Portability and battery ... 169 reviews mention battery, portability, or the
+                                cradle; it works untethered.
+(4) Bluetooth speaker too ..... 85 reviews mention Bluetooth; it works as a plain
+                                speaker without Alexa.
+(5) Price and ecosystem ....... 81 reviews mention price; Prime members get direct
+                                access to the music library.
+(① 音质超出体积预期 ..... 334 条提及音质/音量，是最大正面主题
+② Alexa 语音能力 ....... 311 条提及 Alexa，回答准确度被普遍认可
+③ 便携 + 续航 ......... 169 条提及电池/便携/底座，可脱离插座使用
+④ 蓝牙音箱二合一 ....... 85 条提及蓝牙，不接 Alexa 也能当普通音箱用
+⑤ 价格与生态 ......... 81 条提及价格，Prime 会员可直连曲库)
+
+
+================================================================================
+PART 2  SPECIFICATIONS(第二部分  规格参数)
+================================================================================
+
+2.1 BASIC SPECIFICATIONS(基本参数)
+--------------------------------------------------------------------------------
+Item                  Detail
+--------------------  ----------------------------------------------------------
+Form                  Cylindrical portable speaker; controls and microphones on
+                      the top surface
+Drivers               Dual full-range drivers plus passive radiators (exact
+                      dimensions per official spec)
+Audio processing      Dolby processing; tuned for clear mids and highs and
+                      generous volume
+Battery               Built-in rechargeable lithium battery, rated up to about
+                      9 hours of playback
+Charging              Dedicated charging cradle (drop it in); the cradle doubles
+                      as a display stand
+Connectivity          Dual-band Wi-Fi plus Bluetooth; on Wi-Fi it streams on its
+                      own
+Voice assistant       Alexa (button-activated out of the box; optional
+                      hands-free mode after the 2017 software update)
+Microphone            Top microphone button to start a conversation; physical
+                      play and volume buttons
+Content services      Amazon Music / Prime Music / Pandora / Audible; third-party
+                      services such as Spotify require a paid account (free
+                      accounts do not work)
+Account required      Amazon account sign-in; Prime membership strongly recommended
+                      for the full library
+Hands-free            Depends on firmware (see the note at the top of this file)
+Water resistance      No rating. One buyer reports normal use in a steamy bathroom,
+                      but do not expose it to splashes
+Color                 Black
+Weight/size           Around the 470g class, one-hand portable (per official spec)
+
+项目              内容
+----------------  --------------------------------------------------------------
+形态              圆柱形便携音箱，顶部为按键/麦克风操作区
+发声单元          双全频驱动单元 + 被动辐射器（具体尺寸以官方规格为准）
+音效处理          杜比音效处理，主打中高频清晰、音量充沛
+电池              内置可充电锂电池，官方标称最长约 9 小时播放
+充电方式          专用充电底座（放上即充），底座兼作固定摆放支架
+连接              双频 Wi-Fi + 蓝牙；Wi-Fi 模式下可独立播放在线音乐
+语音助手          Alexa（出厂需按键唤醒；2017 年软件更新后支持可选免提模式）
+麦克风            顶部麦克风键（按下进入对话），另有播放/音量等实体按键
+内容服务          Amazon Music / Prime Music / Pandora / Audible 等；
+                  Spotify 等第三方服务需付费账户（免费账户不可用）
+是否需要账号      需要 Amazon 账号登录；完整曲库体验建议搭配 Prime 会员
+是否可免提        视软件版本而定（详见文首"最重要的发现"）
+机身防护          无防水等级认证；有买家在浴室蒸汽环境下正常使用，但不建议淋水
+颜色              黑色
+重量/体积         约 470g 量级，单手可提（以官方规格为准）
+
+
+2.2 "IT IS NOT AN ECHO" - THE MOST COMMON MISUNDERSTANDING
+（关于"它其实不是 Echo"的说明）
+--------------------------------------------------------------------------------
+Several reviewers walked into this trap, so it is worth stating plainly:
+  - The Tap is not "an Echo you can move." It wins on portability and sound, but
+    its factory behavior around always-on listening differs from the Echo's.
+  - It does not offer the Echo's native multi-room audio experience, and it has no
+    screen.
+  - It needs Wi-Fi for its full capability. On Bluetooth alone it degrades into an
+    ordinary speaker; Alexa needs the network.
+  In one line: treat it as "a portable speaker with Alexa" and you will be happy.
+  Treat it as "a cheap Echo" and you will not.
+
+（这是购买前最容易踩的坑，评价里有多位买家明确踩过：
+  · Tap 不是"能移动的 Echo"。它在便携和音质上更强，但在"常驻监听"这一点上
+    与 Echo 的产品逻辑不同（出厂设定）。
+  · Tap 没有 Echo 的"多房间同步播放（multi-room）"那样的原生体验，
+    也没有后来 Echo Show 的屏幕。
+  · Tap 依赖 Wi-Fi 才能发挥全部能力；只用蓝牙时，它退化为一台普通音箱，
+    Alexa 功能基本不可用（蓝牙模式下不能联网对话）。
+  一句话：把它当"带 Alexa 的便携音箱"，满意；把它当"便宜的 Echo"，失望。）
+
+2.3 ABOUT DISCONTINUATION（关于退市）
+--------------------------------------------------------------------------------
+The product has been discontinued by Amazon and is no longer sold through official
+channels; reviews from late 2017 already say "amazon has discontinued it." What
+circulates now is clearance stock, used, or refurbished units. That means
+after-sales support and firmware updates may no longer be guaranteed. Buy from a
+channel that accepts returns, and confirm the device can sign in to an account and
+still receive updates.
+（该产品已被亚马逊停产，官方渠道不再销售，2017 年下半年起评价中已出现
+"amazon has discontinued it"的说法。目前流通的多为库存机、二手或翻新机。
+这意味着：售后与固件更新可能不再有保障，购买时请优先选择可退换的渠道，
+并确认设备能正常登录账号、能收到系统更新。）
+
+
+================================================================================
+PART 3  WHAT CUSTOMERS ACTUALLY SAID（第三部分  真实口碑数据）
+================================================================================
+
+3.1 RATING DISTRIBUTION (601 REVIEWS)
+（评分分布（601 条））
+--------------------------------------------------------------------------------
+Stars        Count      Share      
+---------  --------  ----------  
+5 stars         402      66.9%    
+4 stars         150      25.0%    
+3 stars          28       4.7%    
+2 stars          12       2.0%    
+1 star            9       1.5%    
+---------  --------  ----------
+Total           601     100.0%    Average 4.54
+
+星级      数量      占比      
+--------  --------  --------  
+5 星         402     66.9%    
+4 星         150     25.0%   
+3 星          28      4.7%   
+2 星          12      2.0%   
+1 星           9      1.5%    
+--------  --------  --------
+合计         601    100.0%    平均 4.54 分
+
+
+Reading the numbers:
+- Positive reviews (4-5 stars) total 91.9%, a broadly favorable record.
+- But 4-star reviews alone are 25%, and they all stall at the same place: "good
+  product, but you have to press the button." The signature sentence is "sound is
+  great, but you have to press the button."
+- 3 stars and below number only 49 (8.2%). Few in absolute terms, but the
+  criticism is tightly clustered, which makes it highly informative.
+
+（解读：
+· 4—5 星合计 91.9%，整体口碑偏正面；
+· 但 4 星占 25%，这批人几乎都卡在同一个地方——"东西不错，就是得用手按"。
+  26 条评价里最典型的句式是："sound is great, but you have to press the button."
+· 3 星及以下仅 49 条（8.2%），绝对数量少，但批评点非常集中，参考价值高。）
+
+3.2 YEAR-BY-YEAR TREND (THIS CURVE IS THE HANDS-FREE STORY)
+（ 年度口碑走势（这条曲线就是"免提"的故事））
+--------------------------------------------------------------------------------
+Year      Reviews    Average    1-3 star count
+--------  ---------  ---------  ---------------
+2016            234       4.52               19
+2017            360       4.56               28
+2018              6       3.67                2
+2019              1       5.00                0
+
+年份      评价数    平均分    1—3 星数量
+--------  --------  --------  ------------
+2016         234     4.52          19
+2017         360     4.56          28
+2018           6     3.67           2
+2019           1     5.00           0
+
+
+The 2017 average (4.56) is higher than 2016's (4.52), on a larger volume of
+reviews. The review text explains why: from May 2017 onward, "it supports
+hands-free now" becomes a recurring line, and a wave of previously hesitant buyers
+finally purchased and rated it well. It is a textbook case of a software update
+rescuing hardware.
+（2017 年的均分（4.56）高于 2016 年（4.52），且 2017 年的评价量更大。
+结合原文可以看出原因：2017 年 5 月之后，"现在支持免提了"成为高频表述，
+一批原本观望的用户因此下单并给出好评。这是软件更新救活硬件的典型案例。）
+
+3.3 THE FIVE TOP POSITIVE THEMES（好评五大主题）
+--------------------------------------------------------------------------------
+[THEME 1] Sound that beats its size (334 mentions of sound or volume)
+  The leading positive reason, and the keywords are loud, clear, and fills a small
+  room.
+  - "The sound is very good and fills a small room well with decent levels."
+  - "The sound in this is on par with other high end portable speakers."
+  - "Music sounds great, just make sure you enable alexa hands free so you dont
+     have to hit the button."
+【主题一】音质超出体积预期（334 条提及音质/音量）
+  这是第一正面理由，关键词是"够响、清晰、填满小房间"。
+  · "The sound is very good and fills a small room well with decent levels."
+    （音量不错，足够填满一个小房间。）
+  · "The sound in this is on par with other high end portable speakers."
+    （音质与其他高端便携音箱相当。）
+  · "Music sounds great, just make sure you enable alexa hands free so you dont
+    have to hit the button."（音乐很好听，记得开启免提，就不用每次按键了。）
+
+
+[THEME 2] Alexa works, and for some it beats Siri (311 mentions of Alexa)
+  - "I'm an Apple guy so Siri has been my go to virtual assistant. I must say that
+     I am duly impressed with Alexa. She seems to understand me better than Siri
+     does."
+  - "Alexa is very accurate (most of the time) to voice commands."
+【主题二】Alexa 好用，甚至比 Siri 更懂你（311 条提及 Alexa）
+  · "I'm an Apple guy so Siri has been my go to virtual assistant. I must say
+    that I am duly impressed with Alexa. She seems to understand me better than
+    Siri does."（我一直用 Siri，但 Alexa 似乎更懂我说的话。）
+  · "Alexa is very accurate (most of the time) to voice commands."
+    （Alexa 对语音指令的识别相当准。）
+
+
+[THEME 3] Portability and the cradle - the reason it exists (169 mentions)
+  The liveliest writing in the whole data set is people describing where they
+  carried it.
+  - "I love that I can pick it up off the charging cradle and take with me
+     anywhere, like to the shower, kitchen, laundry room, back yard."
+  - "the ability to take this anywhere is a huge bonus."
+【主题三】便携 + 底座，是它存在的理由（169 条提及电池/便携/底座）
+  评价里最生动的部分，几乎都是"我把它拎到哪儿"的场景描述。
+  · "I love that I can pick it up off the charging cradle and take with me
+    anywhere, like to the shower, kitchen, laundry room, back yard."
+    （能从底座上拿起来带到任何地方：浴室、厨房、洗衣房、后院。）
+  · "the ability to take this anywhere is a huge bonus."
+    （能随身带走是巨大的加分项。）
+
+[THEME 4] It holds up as a Bluetooth speaker (85 mentions)
+  - "As a bluetooth speaker, the Tap rocks! The sound quality is excellent, plenty
+     loud when needed."
+【主题四】当蓝牙音箱也合格（85 条提及蓝牙）
+  · "As a bluetooth speaker, the Tap rocks! The sound quality is excellent,
+    plenty loud when needed."（作为蓝牙音箱，Tap 很棒，音质出色，需要时很响。）
+
+[THEME 5] Family use and older users (household members appear throughout)
+  - "I got one for my mom she's 90 years young and she sits and listens to it all
+     day."
+  - "we sit around the table, set the TAP in the middle and we can all have a
+     conversation"
+【主题五】家庭场景与长辈友好（多处以家人为主角）
+  · "I got one for my mom she's 90 years young and she sits and listens to it
+    all day."（给我 90 岁的妈妈买了一台，她整天坐着听。）
+  · "we sit around the table, set the TAP in the middle and we can all have a
+    conversation"（家庭聚会时把它放桌子中间，一起跟远方亲人通话。）
+
+3.4 WHERE THE CRITICISM COMES FROM (49 ONE- TO THREE-STAR REVIEWS, BY COUNT)
+（差评归因（49 条 1—3 星，按条数统计））
+--------------------------------------------------------------------------------
+Cause                        Count   Typical wording
+---------------------------  -----  ---------------------------------------
+Weak bass / thin low end        18   "no bass... focused on treble only"
+Must press a button, not
+  hands-free                    11   "you have to press the mic button
+                                      every time"
+Difficult setup                 11   "spent more time trying to get it
+                                      functioning"
+Wi-Fi / connection drops         6   "it cut in and out constantly"
+Alexa fails to understand        6   "I don't understand the question"
+Battery life / hands-free
+  drain                          6   "battery drains FAST when on hands
+                                      free mode"
+Content gated behind Prime /
+  paid accounts                  4   "you cant use Spotify free account"
+(Note: one review can cite several causes, so the counts sum to more than 49.)
+
+原因                        条数    典型表述
+--------------------------  ------  ----------------------------------------
+音质/低音不足                 18     "no bass... focused on treble only"
+必须按键、不是免提            11     "you have to press the mic button
+                                    every time"
+设置繁琐 / 上手困难           11     "spent more time trying to get it
+                                    functioning"
+Wi-Fi / 连接不稳               6     "it cut in and out constantly"
+Alexa 听不懂指令               6     "I don't understand the question"
+电池续航 / 免提耗电快           6     "battery drains FAST when on hands
+                                    free mode"
+内容受限（需 Prime/付费账户）   4     "you cant use Spotify free account"
+（注：同一条评价可能同时命中多个原因，故条数之和大于 49）
+
+
+Four details that need to be spelled out:
+(1) "Great sound" and "no bass" are not contradictory. 334 reviews praise the
+    sound while 18 attack the bass. The praise is about volume, clear mids and
+    highs, and being enough for a small room. The criticism is about missing low
+    end and a thin soundstage. One buyer puts it bluntly: "It is focused on treble
+    only. No low end." That is a physical ceiling set by the enclosure, not a
+    fault. If you want real bass, look at a JBL Charge or a Bose SoundLink - one
+    reviewer gave a one-star rating precisely after switching to a JBL.
+(2) Hands-free is the dividing line, and it correlates with date. 11 reviews
+    explicitly complain about pressing the button, and those cluster in 2016 and
+    early 2017. After May 2017 the same feature becomes a selling point. So "bad
+    hands-free experience" is true only of units that were never updated.
+(3) Connection stability comes up repeatedly. Six negative reviews describe music
+    cutting in and out or failing to connect, and one buyer returned it for an
+    Echo Dot over this. Such issues usually trace back to Wi-Fi coverage and router
+    settings - diagnosable, not necessarily a hardware defect.
+(4) The content ecosystem has a gate. The full library experience is tied to
+    Amazon Music and Prime, and Spotify needs a paid account. Some buyers marked
+    it down for this - it is "know before you buy" information rather than a
+    malfunction.
+（四个必须说清楚的细节：
+① "音质好"与"低音差"并不矛盾。334 条夸音质，18 条骂低音——夸的是音量、
+   中高频清晰度和"小房间够用"；骂的是低频缺失、声场单薄。
+   一位买家说得很直白："It is focused on treble only. No low end."
+   这是产品的物理天花板（体积决定的），不是故障。要重低音请看 JBL Charge、
+   Bose SoundLink 这类产品——评价中有买家正是换了 JBL 之后给的一星。
+② 免提是关键分水岭，且与时间强相关。11 条明确抱怨"每次都要按"，
+   而这批评价集中在 2016 年与 2017 年初。2017 年 5 月后的评价里，
+   同一个功能变成了加分项。所以"免提体验差"这个结论，只对未更新的设备成立。
+③ 连接稳定性被反复提到。6 条差评描述"音乐不断中断"、"连不上"，
+   其中有人因此退货换成 Echo Dot。这类问题多与 Wi-Fi 覆盖和路由器设置有关，
+   属于可排查项，不完全是设备缺陷。
+④ 内容生态有门槛。Tap 的完整曲库体验绑定 Amazon Music/Prime，
+   想用 Spotify 需要付费账户。有买家为此给了差评——这属于"买前该知道"的信息，
+   而不是产品故障。）
+
+
+================================================================================
+PART 4  USE-CASE GUIDE (BASED ON REAL USE REPORTS)
+（第四部分  适用场景指南（基于真实使用反馈））
+================================================================================
+
+4.1 STRONGLY RECOMMENDED: MOVEMENT, VOICE, AND MEDIUM-SIZED ROOMS
+（强烈推荐：移动 + 语音 + 中小空间）
+--------------------------------------------------------------------------------
+  - Bathroom, kitchen, laundry room: carry it over and listen while you work (one
+    buyer reports no trouble in a steamy bathroom)
+  - Bedroom and study: a voice assistant plus background music on the nightstand
+  - Balcony, back yard, camping: fully untethered within Wi-Fi range
+  - Family gatherings: on the table as a speakerphone for group calls
+  - Elderly users: one sentence to play music, opera, or the news; almost no
+    learning curve
+  - Podcasts, audiobooks, news briefings: voice-on-demand beats fiddling with a
+    phone
+  - Smart-home voice entry point: control lights and plugs by voice
+  - Homes that already have an Echo: a movable second Alexa
+（  · 浴室 / 厨房 / 洗衣房：随手拎过去，边做事边听（有买家反馈蒸汽环境下正常）
+  · 卧室 / 书房：床头、书桌上的语音助手 + 背景音乐
+  · 阳台 / 后院 / 露营：Wi-Fi 覆盖范围内可完全脱离电源
+  · 家庭聚会：放桌上当"多人通话的免提电话"
+  · 长辈使用：一句话放戏、放歌、听新闻，几乎零学习成本
+  · 播客、有声书、新闻简报：语音点播比手机方便
+  · 智能家居语音入口：配合智能灯、插座等设备语音控制
+  · 已有 Echo 的家庭：作为"可移动的第二台 Alexa"）
+
+4.2 USE WITH CAUTION: LOWER YOUR EXPECTATIONS
+（谨慎使用：需要降低预期）
+--------------------------------------------------------------------------------
+  - As the main speaker in a large living room: loud enough, but the soundstage
+    does not fill the space, and the low end is especially thin
+  - Long periods in hands-free standby: drains the battery noticeably faster (a
+    point buyers raise explicitly)
+  - Voice interaction in noisy rooms: you need to be near the microphone
+  - Bluetooth only, no Wi-Fi: Alexa is effectively disabled and it becomes an
+    ordinary speaker
+（  · 大客厅主音箱：音量够但声场撑不满，低音尤其单薄
+  · 长时间免提待机：会明显加快耗电（有买家明确指出这一点）
+  · 嘈杂环境下的语音交互：麦克风需要你靠近说话
+  · 只用蓝牙不连 Wi-Fi：Alexa 功能基本失效，退化为普通音箱）
+
+4.3 NOT RECOMMENDED: WHERE DISAPPOINTMENT IS GUARANTEED
+（ 不建议使用：会稳定失望）
+--------------------------------------------------------------------------------
+  - Audiophiles and anyone chasing bass response
+  - Buyers wanting the single main speaker for a living room
+  - Users who rely on a free Spotify account or on Google Assistant
+  - Anyone needing a screen, video calls, or multi-room sync (that is Echo
+    Show / Echo territory)
+  - Buyers who need reliable after-sales support and firmware updates (the product
+    is discontinued)
+（  · 音乐发烧友 / 追求低频表现的用户
+  · 想拿它当"客厅唯一音箱"的人
+  · 依赖 Spotify 免费账户或 Google Assistant 的用户
+  · 需要屏幕、视频通话、多房间同步的用户（这些是 Echo Show / Echo 的领域）
+  · 对售后与固件更新有强需求的用户（产品已停产））
+
+
+================================================================================
+PART 5  COMPETITOR COMPARISON (FROM COMPARATIVE COMMENTS IN REVIEWS)
+（第五部分  竞品对比（来自评价中的对比型表述））
+================================================================================
+
+Compared with        Mentions   What reviewers generally conclude
+-------------------  ---------  ---------------------------------------------
+Echo (1st gen)            167    Less full-bodied than the Echo, but it moves;
+                                 clearly behind on hands-free before the update
+Echo Dot / Dot             52    Better portability and sound (the Dot needs
+                                 external speakers to be heard at all), but the
+                                 Dot is cheaper and better as a stereo add-on
+Bose                        7    Bose sounds better, at several times the price
+JBL (Charge series)         4    Stronger bass and outdoor suitability; at least
+                                 one buyer rated this down after switching
+Google Home                 2    Google Assistant seen as smarter, different
+                                 ecosystem
+Sonos / UE Boom           1+1    Too few mentions to draw conclusions
+
+对比对象            提及次数    评价主流结论
+------------------  ----------  ----------------------------------------------
+Echo（初代）           167       音质不如 Echo 厚实，但胜在能移动；
+                                免提体验在更新前明显落后
+Echo Dot / Dot          52       便携与音质更强（Dot 需外接音箱才响），
+                                但 Dot 更便宜、更适合接音响
+Bose                    7       认可 Bose 音质更高级，但价格差数倍
+JBL（Charge 系列）       4       低音与户外适应性更强，有买家换机后给差评
+Google Home             2       认为 Google Assistant 更聪明，但生态不同
+Sonos / UE Boom         1+1     提及极少，仅作"高端便携"参照
+
+
+In one line: the Tap occupied a unique slot - it was one of very few
+battery-powered Alexa devices on the market. Do not compare its sound to an Echo,
+its bass to a JBL, or its price to a Dot. Its entire value is in the one thing it
+does that they cannot: you can pick it up and walk away.
+
+（一句话总结：Tap 的定位独一无二——它曾是市面上少见的"带电池的 Alexa"。
+不跟 Echo 比音质、不跟 JBL 比低音、不跟 Dot 比价格，它的价值就在"能拎走"这一件事上。）
+
+
+================================================================================
+PART 6  SETUP AND CARE（第六部分  使用与保养建议）
+================================================================================
+
+6.1 YOUR FIRST 20 MINUTES（开箱后的前 20 分钟）
+--------------------------------------------------------------------------------
+1. Install the Alexa app on your phone and sign in with your Amazon account -
+   this is the only setup path.
+2. Seat the Tap on its charging cradle and charge it fully before first use.
+3. Join Wi-Fi through the app. A 2.4GHz network is the safest bet for
+   compatibility and range.
+4. The critical step: open the device settings in the app and turn on hands-free
+   wake word. If the option is not there, update the firmware first - this is the
+   dividing line for the whole experience.
+5. Try three commands: ask for the weather, play a song, set an alarm. If those
+   three work, you are set up.
+（1. 先用手机下载 Alexa App，登录 Amazon 账号——这是唯一的设置入口。
+2. 把 Tap 放上充电底座充满电（首次建议充满再用）。
+3. 在 App 里完成 Wi-Fi 配网：建议连接 2.4GHz 网络，兼容性最好、穿墙更强。
+4. 关键一步：进 App 的设备设置，把"免提唤醒（hands-free）"打开。
+   如果找不到这个选项，先把固件更新到最新版——这是决定体验的分水岭。
+5. 试三句指令：问天气、放一首歌、设一个闹钟。能通这三句，基本就配好了。）
+
+6.2 EVERYDAY TIPS（日常使用技巧）
+--------------------------------------------------------------------------------
+- Say the wake word, then keep the sentence short. "Alexa, play jazz" succeeds more
+  often than a long request.
+- Hands-free mode drains the battery noticeably faster; switch back to button mode
+  to save power.
+- Tuning: flatten the EQ at low volume for a more comfortable mid and high range,
+  and do not expect it to manufacture bass.
+- Placement matters. A corner or a tabletop reinforces low frequencies; open space
+  gives cleaner sound. Try a few spots.
+- On Bluetooth, Alexa's network features are unavailable - do not mistake that for
+  a fault.
+- With several Alexa devices in one room, avoid triggering two at once.
+（· 说话前先说唤醒词再开口，句子要短。"Alexa, play jazz" 比长句成功率高。
+· 免提模式下耗电明显加快；想省电就切回按键模式。
+· 音质调校：把小音量下的均衡器调平，中高频更耐听；不要指望它补低频。
+· 放在墙角或桌面上会增强低频反射，放空旷处声音更干净——按房间试位置。
+· 蓝牙模式听手机本地音乐时，记得 Alexa 的联网功能同时不可用，别误判为"坏了"。
+· 多台设备同屋时，避免同时唤醒造成"抢答"。）
+
+6.3 BATTERY AND HARDWARE CARE（电池与硬件保养）
+--------------------------------------------------------------------------------
+- Keep it on the cradle day to day; shallow charge cycles age a lithium battery
+  less than deep discharge.
+- Avoid long periods at full charge in high heat (a sunlit windowsill, for
+  example).
+- No water-resistance rating: bathroom use is fine, but keep it out of splash
+  range.
+- For long storage, shut down at around 50% and top it up every three months.
+- Wipe with a dry or slightly damp cloth; never spray alcohol into the microphone
+  openings.
+（· 日常放着就搁底座上，锂电池浅充浅放比深度放空更耐用。
+· 不建议长期满电且高温放置（如阳光直射的窗台），会加速电池老化。
+· 无防水认证，浴室使用可以，但别放在会被水直接溅到的位置。
+· 长期不用：电量保持在 50% 左右关机，每三个月补一次。
+· 机身用干布或微湿布擦拭，不要用酒精直接喷麦克风孔。）
+
+6.4 CHECKLIST BEFORE BUYING USED OR CLEARANCE STOCK
+（买二手/库存机前的检查清单）
+--------------------------------------------------------------------------------
+(1) Can it sign in and bind to an Amazon account? (A failed bind can mean the
+    previous owner did not deregister it.)
+(2) Can it update to the latest firmware? (This decides whether you get
+    hands-free.)
+(3) Real battery runtime (rated 9 hours; older units often manage 4-5).
+(4) Is the charging cradle original? It is a proprietary part and hard to replace.
+(5) Does the Wi-Fi module hold a connection? Repeated drops are a common sign of
+    aging.
+（① 能否正常登录 Amazon 账号并绑定设备（绑定失败可能是被前主人解绑不全）
+② 系统能否更新到最新版（决定有没有免提）
+③ 电池实际续航（标称 9 小时，老机器衰减到 4—5 小时很常见）
+④ 充电底座是否原装（这是专用件，丢了很难配）
+⑤ Wi-Fi 模块是否正常（连接反复掉线是常见老化症状））
+
+
+================================================================================
+PART 7  FREQUENTLY ASKED QUESTIONS（第七部分  常见问题（FAQ））
+================================================================================
+
+Q1: Do I need Prime to use it?
+A: No. Basic functions - weather, alarms, news, smart-home control - work without
+   it. But Prime Music makes the music experience much better, and third-party
+   services like Spotify require a paid account.
+（Q1：需要 Prime 会员才能用吗？
+A：不需要。问天气、设闹钟、听新闻、控制智能家居等基础功能都能用。
+    但想听完整曲库，Prime Music 会明显更好用；Spotify 等第三方服务需付费账户。）
+
+Q2: Is it hands-free or not?
+A: It depends on firmware. The shipping version required a button press; a software
+   update around May 2017 added an optional hands-free mode. Before buying used,
+   confirm it can update and check whether the setting exists.
+（Q2：它到底能不能免提？
+A：看软件版本。出厂版本必须按键唤醒；2017 年 5 月前后的软件更新加入了
+    可选免提模式。买二手前请务必确认能否更新，并检查设置里有没有该选项。）
+
+Q3: Can it work as a normal Bluetooth speaker?
+A: Yes, and reviewers rate it well for that. Pair a phone and play local music -
+   though Alexa's network features are unavailable in that mode.
+（Q3：能当普通蓝牙音箱用吗？
+A：能，而且评价不错。手机蓝牙连上即可播放本地音乐，
+    但此时 Alexa 的联网能力不可用。）
+
+Q4: How does the sound compare with an Echo?
+A: Enough volume and clarity, but not as full-bodied as the first-generation Echo,
+   and notably thin in the low end. Fine for small rooms, spoken word, podcasts,
+   and pop. Disappointing for bass-heavy music or large spaces.
+（Q4：音质和 Echo 比怎么样？
+A：音量与清晰度够用，但整体不如初代 Echo 厚实，低频尤其单薄。
+    小房间、人声、播客、流行乐都没问题；重低音、大空间会失望。）
+
+Q5: Can I take it outside? How long does the battery last?
+A: Yes. Built-in battery plus charging cradle, rated about 9 hours; older units may
+   manage 4-6. It needs Wi-Fi coverage to be an Alexa device.
+（Q5：能带出门吗？续航多久？
+A：能。内置电池 + 充电底座，官方标称约 9 小时；老机器实际可能只有 4—6 小时。
+    需要在 Wi-Fi 覆盖范围内，否则只能当蓝牙音箱。）
+
+Q6: Can I connect it to a TV or an external stereo?
+A: The Tap is a self-contained speaker built around its own drivers. If you want to
+   feed a stereo system, an Echo Dot is the better choice.
+（Q6：能接电视或外接音响吗？
+A：Tap 定位是自成一体的音箱，以自带扬声器为主；
+    想接音响系统，Echo Dot 才是更合适的选择（有音频输出）。）
+
+Q7: Can I still buy it new? What about support?
+A: It is discontinued and no longer sold officially; most units on the market are
+   clearance or used. Prefer channels that accept returns - firmware updates and
+   support may no longer be guaranteed.
+（Q7：还能买到新的吗？售后怎么办？
+A：已停产，官方渠道不再销售，市面多为库存或二手。
+    购买时优先选可退换渠道；固件更新与售后可能已无保障。）
+
+Q8: Is it worth buying?
+A: Depends what you want. For "an Alexa I can carry around," it has almost no
+   substitute and is worth it. For "the best sound" or "the cheapest Alexa," it is
+   neither - look at JBL/Bose or an Echo Dot.
+（Q8：值得买吗？
+A：看你要什么。要"能拎着走的 Alexa"——它在同类里几乎没有替代品，值得。
+    要"最好的音质"或"最便宜的 Alexa"——它不是，请选 JBL/Bose 或 Echo Dot。）
+
+
+================================================================================
+PART 8  HEADLINE COPY / LISTING-READY TEXT
+（第八部分  一句话卖点 / 详情页可用文案）
+================================================================================
+
+MAIN HEADLINE
+  Alexa you can carry: nine hours of battery, from the bedroom to the bathroom,
+  from the kitchen to the back yard.
+
+SUBHEADLINE
+  More than a speaker - a voice assistant that follows you around. Just press the
+  button once, or update it to the hands-free build.
+
+THREE SHORT BULLETS
+  - 91.9% positive and 4.5 stars: the shared verdict of 601 buyers
+  - Two devices in one: Alexa assistant plus a plain Bluetooth speaker that still
+    plays when Wi-Fi drops
+  - Drop-in charging cradle: hours off the wall, free to move anywhere in the house
+
+ONE HONEST DISCLAIMER (credibility, not a weakness)
+  Discontinued, light on bass, and hands-free depends on firmware - confirm all
+  three before you buy.
+
+（主标题
+  能拎着走的 Alexa：9 小时续航，从卧室提到浴室，从厨房拎到后院。
+
+副标题
+  它不只是音箱，是一个会跟着你走的语音助手——前提是你按一下，或者把它更新到免提版。
+
+三条短卖点
+  · 91.9% 好评、4.5 星：601 位买家的共同结论
+  · 一机两用：Alexa 语音助手 + 普通蓝牙音箱，Wi-Fi 断了也能放歌
+  · 充电底座即放即充：脱离插座可用数小时，全屋自由移动
+
+一条风险提示（说清楚反而加分）
+  已停产，低频偏弱，免提功能取决于系统版本——买前请确认这三点。）
+
+
+================================================================================
+APPENDIX  TWELVE REPRESENTATIVE REVIEWS
+（附录  代表性用户原声（12 条））
+================================================================================
+
+[POSITIVE]【正面】
+
+1. ***** "With the new update allowing hands-free 'Hey Alexa' commands, this is a
+   great device. The battery allows you to disconnect from the wall. The sound is
+   very good and fills a small room well."
+（1. ★★★★★ "With the new update allowing hands-free 'Hey Alexa' commands, this is a
+   great device. The battery allows you to disconnect from the wall. The sound is
+   very good and fills a small room well."
+   → 更新后支持"Hey Alexa"免提唤醒，这台就变得很棒了。电池让你脱离插座，
+     音质不错，足够填满一个小房间。）
+
+
+2. ***** "I love that I can pick it up off the charging cradle and take with me
+   anywhere, like to the shower, kitchen, laundry room, back yard, or anywhere
+   within wifi range."
+（2. ★★★★★ "I love that I can pick it up off the charging cradle and take with me
+   anywhere, like to the shower, kitchen, laundry room, back yard, or anywhere
+   within wifi range."
+   → 最喜欢能从底座上拿起来带到任何地方：浴室、厨房、洗衣房、后院，
+     只要在 Wi-Fi 范围内。）
+
+
+3. ***** "I'm an Apple guy so Siri has been my go to virtual assistant. I must say
+   that I am duly impressed with Alexa. She seems to understand me better than Siri
+   does."
+（3. ★★★★★ "I'm an Apple guy so Siri has been my go to virtual assistant. I must say
+   that I am duly impressed with Alexa. She seems to understand me better than
+   Siri does."
+   → 我一直是苹果用户，Siri 是我的默认助手。但 Alexa 确实让我印象深刻，
+     她似乎比 Siri 更懂我说的话。）
+
+
+4. ***** "As a bluetooth speaker, the Tap rocks! The sound quality is excellent,
+   plenty loud when needed, and excellent quality with no stutters in streaming."
+（4. ★★★★★ "As a bluetooth speaker, the Tap rocks! The sound quality is excellent,
+   plenty loud when needed, and excellent quality with no stutters in streaming."
+   → 作为蓝牙音箱它很棒：音质出色，需要时足够响，串流也没有卡顿。）
+
+
+5. ***** "I got one for my mom she's 90 years young and she sits and listens to it
+   all day."
+（5. ★★★★★ "I got one for my mom she's 90 years young and she sits and listens to it
+   all day."
+   → 给我 90 岁的妈妈买了一台，她整天坐着听。）
+
+
+6. ***** "Now that this supports hands free access and amazon has discontinued it
+   this is the last chance to get a battery operated echo device." (This single
+   review confirms both the hands-free update and the discontinuation.)
+（6. ★★★★★ "Now that this supports hands free access and amazon has discontinued it
+   this is the last chance to get a battery operated echo device."
+   → 现在它支持免提了，而亚马逊已经停产——这是最后一台能带电池的 Echo 了。
+   （注：这条同时印证了"免提更新"与"已停产"两件事。））
+
+
+[NEGATIVE / CAUTIONARY]【负面 / 提醒】
+
+7. *---- "We were so excited to get the tap since it was a larger speaker than the
+   dot... When listening to online radio on the tap it cut in and out constantly.
+   We returned it and exchanged for the dot."
+（7. ★☆☆☆☆ "We were so excited to get the tap since it was a larger speaker than
+   the dot... When listening to online radio on the tap it cut in and out
+   constantly. We returned it and exchanged for the dot."
+   → 本来很期待，因为它比 Dot 大。但在线电台老是断断续续，最后退了换成 Dot。）
+
+8. **--- "While it seemed to work fine, the Tap does not have the open mic
+   feature... makes you press the mic button every time you wish to communicate
+   with Alexa, which seems to defeat the purpose."
+（8. ★★☆☆☆ "While it seemed to work fine, the Tap does not have the open mic
+   feature... makes you press the mic button every time you wish to communicate
+   with Alexa, which seems to defeat the purpose."
+   → 东西没毛病，但没有常开麦克风，每次跟 Alexa 说话都要按一下，
+     这基本违背了它的意义。）
+
+9. ***-- "It has no bass. If you want something that has a good range of sound, this
+   isn't it. It is focused on treble only. I ended up getting the JBL Charge 3."
+（9. ★★★☆☆ "It has no bass. If you want something that has a good range of sound,
+   this isn't it. It is focused on treble only. I ended up getting the JBL
+   Charge 3."
+   → 完全没有低音。想要音域完整的别选它，它只做高频。我最后换了 JBL Charge 3。）
+
+
+10. ***-- "The product works well. However, you have to hold down the button to use
+    the best part of the device, Alexa... but the sound quality of this product is
+    just so dog on awesome!!"
+（10. ★★★☆☆ "The product works well. However, you have to hold down the button to
+    use the best part of the device, Alexa... but the sound quality of this
+    product is just so dog on awesome!!"
+    → 东西好用，但要用它最核心的 Alexa 就得按住按钮……不过音质是真的太棒了。）
+
+
+11. **--- "You cant use Spotify free account, to work around you must add a lot of
+    free music to Amazon music into your own amazon music account."
+（11. ★★☆☆☆ "You cant use Spotify free account, to work around you must add a lot
+    of free music to Amazon music into your own amazon music account."
+    → Spotify 免费账户用不了，得绕一大圈把免费音乐加进亚马逊音乐账户里。）
+
+
+12. ***-- "I also have an Echo and I don't have the same connectivity issues with it
+    that I do with this."
+（12. ★★★☆☆ "I also have an Echo and I don't have the same connectivity issues with
+    it that I do with this."
+    → 我也有 Echo，用它就没有这台这样的连接问题。）
+
+
+================================================================================
+                                 -- END --
+================================================================================
+
+Data note: every statistic in this document is based on the 601 records in the
+review spreadsheet whose name field contains "Amazon Tap". Ratings come from the
+reviews.rating field and dates from the reviews.date field (April 2016 to January
+2019). The sample is limited, so the proportions describe this sample only and are
+not a proxy for overall market sentiment.
+（数据口径备注：本文件所有统计均基于评价明细表中 name 字段含 "Amazon Tap" 的 601 条
+记录。评分为 reviews.rating 字段，时间为 reviews.date 字段（2016-04 至 2019-01）。
+样本量有限，比例数据仅代表该样本，不等同于整体市场口碑。）
