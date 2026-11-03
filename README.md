@@ -6,9 +6,9 @@
 
 ## 安装与使用
 
-本轮本地交付统一为 **0.9.0**，文件在项目 `releases` 目录：`AutoReply-Setup-0.9.0-win-x64.exe` 和 `autoreply-extension-v0.9.0.zip`。`releases/CURRENT.json` 记录当前交付版本和校验值；旧包放在 `releases/archive`。安装程序内已附带插件目录。
+当前交付版本为 **0.9.0**。从 [v0.9.0 发布页](https://github.com/kyle-1227/AutoReply/releases/tag/v0.9.0) 下载 [Windows 安装程序](https://github.com/kyle-1227/AutoReply/releases/download/v0.9.0/AutoReply-Setup-0.9.0-win-x64.exe) 或 [插件 ZIP](https://github.com/kyle-1227/AutoReply/releases/download/v0.9.0/autoreply-extension-v0.9.0.zip)。安装程序内已附带插件目录，ZIP 用于单独分发扩展。
 
-[GitHub Releases](https://github.com/kyle-1227/AutoReply/releases) 仍保留历史发布，本轮尚未上传；不能用旧发布包替代本地当前构建。
+发布附件同时提供中文安装说明、CURRENT.json 和 SHA256SUMS.txt，便于核对版本、文件大小及 SHA-256。源码本机打包文件位于 `releases`，旧包保留在 `releases/archive`；历史版本可从 [GitHub Releases](https://github.com/kyle-1227/AutoReply/releases) 查看。
 
 1. 每台 Windows 10／11 x64 电脑的使用账号安装一次 AutoReply-Setup-0.9.0-win-x64.exe。API Key 可在安装向导填写，也可留空后在插件“模型账户”填写。内置 Node.js 24.14.0，无需另装运行时。
 2. Chrome／Edge 在扩展管理页开启开发者模式，加载直接包含 manifest.json 的文件夹：源码或安装目录中的 extension，或插件 ZIP 的解压目录。
@@ -19,6 +19,8 @@
 首页右上角的“版本更新”可查看当前插件及本机组件版本，重新检查组件连接，并打开 GitHub 发布页下载配套安装包。此入口不自动判定远端最新版或覆盖安装；发布版本可能落后于本地构建，下载前需核对版本号，安装后重新加载插件。
 
 文本／图片默认使用 anthropic/claude-haiku-5.5，包含视频的整条评价使用 meta/muse-spark-1.3-contributor。
+
+已知限制：视频默认端点可能被 OpenRouter 账户的供应商偏好、隐私设置或其他限制排除，返回 404 后任务会自动暂停。v0.9.0 尚未加入账户可用模型预检，视频链路仍需进一步验收；本次发布未修改视频模型配置。
 
 源码中的 Haiku 使用 `low`、`max_tokens: 2048` 和严格 JSON Schema，并执行本地输出校验。业务规则先区分当前问题、已解决历史和其他商家的经历，再判断售后、安全、商品故障或资料不足；商品破损仅在 4–5 星、明确接受且没有优先人工条件时允许自动回复。公开回复最多 300 个 UTF-16 代码单元，结果仍停留在待确认。
 
