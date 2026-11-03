@@ -134,7 +134,7 @@ export async function observeReviewPage(operationId) {
     let batch = await query(() => filter().click());
     const source = batch.source;
     const reviews = [], seen = new Set();
-    let page = 1, pageSize = 0;
+    let page = 1, pageSize = 0, rawCount = 0;
     while (true) {
       await renderReady(() => checked(filter()) && (batch.total === 0 ||
         (Number(document.querySelector('[data-tid="m4b_pagination"] [aria-current="true"]')?.textContent) === page &&
@@ -144,14 +144,18 @@ export async function observeReviewPage(operationId) {
       pageSize = Number(pagination?.querySelector('input')?.value.match(/^\d+/)?.[0]) || (batch.total === 0 ? 50 : 0);
       if (!pageSize) fail("无法识别每页评价数量。");
       let added = 0;
+      rawCount += batch.reviews.length;
       for (const review of batch.reviews) {
         if (!seen.has(review.reviewId)) { seen.add(review.reviewId); reviews.push(review); added++; }
       }
       const next = pagination?.querySelector('[aria-label="下一个"], [aria-label="Next"]');
       const disabled = !next || next.getAttribute("aria-disabled") === "true" || next.classList.contains("core-pagination-item-disabled");
       if (disabled) {
-        if (reviews.length !== batch.total) fail("读取数量与店铺总数不一致，请重试，未将本轮标记为完成。");
-        return { source, reviews, pagination: { page, pageSize, total: batch.total } };
+        if (page < Math.ceil(batch.total / pageSize)) fail(`分页提前结束：已读取第 ${page} 页，平台总数 ${batch.total} 条，请重试。`);
+        // Some real pages are sparse or overlap even while total stays fixed.
+        // Keep the discrepancy visible instead of dropping every valid review.
+        return { source, reviews, pagination: { page, pageSize, total: batch.total,
+          readCount: reviews.length, rawCount, complete: reviews.length === batch.total } };
       }
       if (!added || reviews.length >= batch.total) fail("评价分页与总数不一致，已停止循环。");
       batch = await query(() => next.click());

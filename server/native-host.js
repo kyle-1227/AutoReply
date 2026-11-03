@@ -1,19 +1,24 @@
-import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ReplyService } from "./service.js";
 import { DEFAULT_SETTINGS } from "./reply-generator.js";
-import { PROTOCOL_VERSION, MAX_MESSAGE_BYTES } from "../extension/protocol.js";
+import { APP_VERSION, PROTOCOL_VERSION, COST_TRACKING_VERSION, MAX_MESSAGE_BYTES } from "../extension/protocol.js";
 import { Credentials } from "./credentials.js";
 import { isActive } from "../extension/model.js";
+import { CostTracker } from "./cost-tracker.js";
+import { CATEGORY_RULES_VERSION } from "../extension/categories.js";
+import { DEFAULT_PROMPT } from "./prompt-rules.js";
 
-const version = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
 const fail = message => { throw Object.assign(new Error(message), { status: 400, code: "INPUT_INVALID" }); };
 
 export function dispatch(service, command, payload, credentials = null) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) fail("请求参数格式无效。");
-  if (command === "health") return { protocolVersion: PROTOCOL_VERSION, componentVersion: version,
-    hasModelKey: Boolean(service.settings.apiKey), canSaveKey: Boolean(credentials) };
+  if (command === "health") return { protocolVersion: PROTOCOL_VERSION, componentVersion: APP_VERSION,
+    hasModelKey: Boolean(service.settings.apiKey), canSaveKey: Boolean(credentials),
+    costTrackingVersion: service.costs ? COST_TRACKING_VERSION : 0, costSessionId: service.costs?.sessionId || null,
+    categoryRulesVersion: CATEGORY_RULES_VERSION, promptVersion: DEFAULT_PROMPT.version };
+  if (command === "cost_ack") return service.costs?.acknowledge(payload) || { acknowledged: false };
+  if (command === "cost_reconcile") return service.costs?.reconcile(payload.entries) || { accepted: false };
   if (command === "credentials") {
     if (!credentials) fail("请安装支持插件内填写 API Key 的新版本机组件。");
     if (Object.keys(payload).length !== 1 || !Object.hasOwn(payload, "apiKey")) fail("模型账户参数无效。");
@@ -22,7 +27,10 @@ export function dispatch(service, command, payload, credentials = null) {
   }
   const { taskId, ...input } = payload;
   if (typeof taskId !== "string" || !/^[\w-]{1,100}$/.test(taskId)) fail("任务标识无效。");
-  if (command === "control") return service.control(taskId, input);
+  if (command === "control") {
+    if (Object.keys(input).some(key => !["source", "generation", "status", "costRoundId", "categoryIds"].includes(key))) fail("任务控制只接受归属、执行状态、费用轮次和内置类目。");
+    return service.control(taskId, input);
+  }
   if (command === "heartbeat") return service.heartbeat(taskId, input.generation);
   if (command === "generate") {
     if (Object.keys(input).some(key => !["generation", "review", "product"].includes(key))) fail("生成只接受评价、当前商品资料和执行代次。");
@@ -38,7 +46,7 @@ export function startHost(service, { input = process.stdin, output = process.std
   const timer = setInterval(() => service.cleanup(), 60000);
   const close = () => {
     if (closed) return;
-    closed = true; clearInterval(timer); buffer = Buffer.alloc(0); service.close();
+    closed = true; clearInterval(timer); buffer = Buffer.alloc(0); service.costs?.close(); service.close();
     input.removeListener("data", receive);
   };
   const send = message => {
@@ -49,11 +57,12 @@ export function startHost(service, { input = process.stdin, output = process.std
     const header = Buffer.alloc(4); header.writeUInt32LE(body.length);
     output.write(Buffer.concat([header, body]));
   };
+  service.costs = new CostTracker({ settings: service.settings, send });
   const handle = async message => {
     const requestId = message?.requestId;
     try {
       if (typeof requestId !== "string" || requestId.length > 100) fail("请求标识无效。");
-      if (credentials && ["health", "control", "generate"].includes(message.command)) await credentials.refresh(service.settings);
+      if (credentials && ["health", "control", "generate", "cost_reconcile"].includes(message.command)) await credentials.refresh(service.settings);
       const data = await dispatch(service, message.command, message.payload, credentials);
       send({ requestId, ok: true, data });
     } catch (error) {

@@ -1,6 +1,7 @@
 import { emptyTask, newReview, demoReviews, demoReply, STEP_MS, MANUAL_REASON, isActive, isFinished } from "./model.js";
 import { createQueue } from "./queue.js";
 import { reviewIdentity, validateReviewBatch } from "./review-context.js";
+import { pendingReviews, reviewProductId } from "./review-queue.js";
 
 // CDN signatures/hosts can rotate without the buyer editing the attached media.
 const reviewContent = review => JSON.stringify({ ...review,
@@ -46,6 +47,7 @@ export class TaskRunner {
   resetCurrent() {
     const current = this.state.reviews.find(review => review.id === this.state.currentId);
     if (current?.status === "processing") {
+      if (this.state.mode === "llm") this.state.queueCursor = { productId: reviewProductId(current), reviewId: current.id };
       current.status = "pending";
       current.reply = "";
     }
@@ -78,7 +80,7 @@ export class TaskRunner {
 
   claimNext() {
     if (this.state.status !== "running" || this.state.currentId) return;
-    const next = this.state.reviews.find(review => review.status === "pending");
+    const next = pendingReviews(this.state)[0];
     if (!next) {
       if (this.state.mode === "llm" && this.state.reviewSource) {
         this.state.nextStepAt = this.now();
@@ -89,6 +91,7 @@ export class TaskRunner {
       return;
     }
     next.status = "processing";
+    if (this.state.mode === "llm") this.state.queueCursor = { productId: reviewProductId(next), reviewId: next.id };
     this.state.currentId = next.id;
     this.state.phase = 0;
     this.state.nextStepAt = this.now() + (this.state.mode === "llm" ? 0 : this.stepMs);
@@ -110,6 +113,7 @@ export class TaskRunner {
   }
 
   async commit() {
+    if (isFinished(this.state)) this.state.queueCursor = null;
     this.state.revision += 1;
     try {
       try { await this.syncRun(); }
@@ -303,6 +307,7 @@ export class TaskRunner {
         review.generationRecord = { ...generated.record, result: generated.result };
         review.completedAt = this.now();
         review.retryAt = null;
+        this.state.queueCursor = { productId: reviewProductId(review), reviewId: null };
         this.work = null;
         this.state.callState = null;
         this.state.currentId = null;
@@ -313,7 +318,7 @@ export class TaskRunner {
       if (!current()) return;
       await this.enqueue(async () => {
         if (!current()) return;
-        const known = ["INPUT_INVALID", "OUTPUT_INVALID", "CONTEXT_INVALID", "MEDIA_UNAVAILABLE", "KEY_MISSING", "RETRY_WAIT", "PAGE_READ_FAILED", "GENERATION_FAILED"];
+        const known = ["INPUT_INVALID", "OUTPUT_INVALID", "CONTEXT_INVALID", "MEDIA_UNAVAILABLE", "KEY_MISSING", "RETRY_WAIT", "PAGE_READ_FAILED", "GENERATION_FAILED", "COST_STORAGE_FAILED"];
         this.cancelTick();
         this.resetCurrent();
         this.state.status = "paused";
@@ -398,13 +403,14 @@ export class TaskRunner {
         case "CLEAR": {
           if (isActive(this.state)) throw new Error("请先暂停任务，再清空记录。");
           const paused = this.state.status === "paused";
+          const costEpoch = (this.state.costEpoch || 0) + 1;
           if (this.state.mode === "llm") {
             this.state.status = "ended";
             await this.syncRun();
           }
           this.cancelTick();
           this.state = { ...emptyTask(), revision: this.state.revision, generation: this.generation,
-            status: paused ? "paused" : "idle" };
+            costEpoch, status: paused ? "paused" : "idle" };
           break;
         }
         default:

@@ -1,5 +1,7 @@
 import { $, element } from "./ui.js";
 import { renderMedia, mediaKey } from "./media.js";
+import { CATEGORY_SOURCE_NAMES, categoryName } from "./categories.js";
+import { pendingReviews } from "./review-queue.js";
 
 const reviewLabels = { pending: "待处理", generated: "已生成 · 待确认", replied: "模拟已回复", manual: "待人工" };
 const groupLabels = { ...reviewLabels, pending: "剩余评价队列" };
@@ -11,7 +13,7 @@ let renderedListKey = "";
 export function renderReviews(state, pauseRequested = false) {
   const filter = $("review-filter").value;
   renderCurrent(state, pauseRequested, filter);
-  renderLists(state.reviews, filter);
+  renderLists(state, filter);
 }
 
 function renderReply(container, text) {
@@ -100,6 +102,7 @@ function reviewCard(review, number) {
   if (review.generationRecord) {
     const record = review.generationRecord, provenance = element("details", "review-provenance");
     provenance.append(element("summary", "", record.product ? "商品资料回复" : "通用回复"), element("p", "", `模型：${record.model}\n规则版本：${record.promptVersion || "旧版"}\n商品资料：${record.product ? `${record.product.name || record.product.id} / ${record.product.version}` : "无，通用回复"}`));
+    if (Object.hasOwn(record, "categoryId")) provenance.append(element("p", "", `类目规则：${categoryName(record.categoryId)}\n类目来源：${CATEGORY_SOURCE_NAMES[record.categorySource] || "未记录"}`));
     card.append(provenance);
   }
   if (review.status === "manual") {
@@ -142,14 +145,18 @@ function queueItem(review, number, open) {
   return item;
 }
 
-function renderLists(reviews, filter) {
-  const key = JSON.stringify([filter, reviews]);
+function renderLists(state, filter) {
+  const { reviews } = state;
+  const key = JSON.stringify([filter, reviews, state.queueCursor]);
   if (key === renderedListKey) return; // Keep focus and disclosure state on unchanged snapshots.
   renderedListKey = key;
   const expanded = new Set([...$("review-list").querySelectorAll("details[data-review-id][open]")].map(item => item.dataset.reviewId));
+  const focused = document.activeElement;
+  const focusedReview = focused?.closest("details[data-review-id]")?.dataset.reviewId;
   const groups = { pending: [], generated: [], replied: [], manual: [] }, manual = [];
+  groups.pending = pendingReviews(state).map(review => queueItem(review, undefined, expanded.has(review.id)));
   reviews.forEach((review, index) => {
-    groups[review.status]?.push(queueItem(review, index + 1, expanded.has(review.id)));
+    if (review.status !== "pending") groups[review.status]?.push(queueItem(review, index + 1, expanded.has(review.id)));
     if (review.status === "manual") manual.push(reviewCard(review, index + 1));
   });
   const sections = [];
@@ -169,4 +176,9 @@ function renderLists(reviews, filter) {
   $("review-list").replaceChildren(...sections);
   $("manual-list").replaceChildren(...manual);
   $("manual-empty").hidden = manual.length > 0;
+  if (focusedReview) {
+    const row = [...$("review-list").querySelectorAll("details[data-review-id]")].find(item => item.dataset.reviewId === focusedReview);
+    const target = focused.dataset.action ? [...(row?.querySelectorAll("button") || [])].find(button => button.dataset.action === focused.dataset.action) : row?.firstElementChild;
+    target?.focus({ preventScroll: true });
+  }
 }

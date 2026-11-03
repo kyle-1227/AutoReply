@@ -2,8 +2,10 @@ import { readFile, readdir, access } from "node:fs/promises";
 import { resolve, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
+import { syncVersion } from "./version.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
+await syncVersion(root, undefined, true);
 const extension = join(root, "extension");
 const manifest = JSON.parse(await readFile(join(extension, "manifest.json"), "utf8"));
 const metadata = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
@@ -27,7 +29,10 @@ for (const name of files.filter(name => name.endsWith(".html"))) {
   for (const [, values] of html.matchAll(/\b(?:for|aria-controls|aria-labelledby|aria-describedby|data-close)="([^"]+)"/g)) {
     for (const id of values.split(/\s+/)) if (!pageIds.includes(id)) throw new Error(`Missing ${id} in ${name}.`);
   }
-  references.push(...[...html.matchAll(/\b(?:src|href)="([^"#]+)"/g)].map(match => match[1]));
+  for (const [, tag, attribute, reference] of html.matchAll(/<([a-z][\w-]*)\b[^>]*?\b(src|href)="([^"#]+)"/gi)) {
+    if (tag === "a" && attribute === "href" && reference.startsWith("https://")) continue;
+    references.push(reference);
+  }
 }
 for (const name of files.filter(name => name.endsWith(".js"))) {
   const source = scripts.get(join(extension, name));

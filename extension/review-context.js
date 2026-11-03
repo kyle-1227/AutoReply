@@ -37,5 +37,12 @@ export function validateReviewBatch(batch) {
     validateReview(review);
     if (!text(review.product.productId)) throw invalid("平台评价缺少商品 ID。", "PAGE_INVALID");
   });
+  const p = batch.pagination;
+  if (Object.hasOwn(p, "complete") && (typeof p.complete !== "boolean" ||
+      !Number.isInteger(p.readCount) || p.readCount !== batch.reviews.length ||
+      !Number.isInteger(p.rawCount) || p.rawCount < p.readCount ||
+      p.complete !== (p.readCount === p.total) || p.page < Math.ceil(p.total / p.pageSize))) {
+    throw invalid("评价读取统计无效，不能将未完成分页视为完整读取。", "PAGE_INVALID");
+  }
   return batch;
 }

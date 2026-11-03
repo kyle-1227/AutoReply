@@ -1,4 +1,5 @@
 import { PRODUCTS_KEY } from "./model.js";
+import { categoryId, categoryIds } from "./categories.js";
 
 export const CATALOG_PREFIX = "autoreply.products.v2:";
 const fail = message => { throw Object.assign(new Error(message), { status: 400 }); };
@@ -18,7 +19,7 @@ export const catalogKey = source => CATALOG_PREFIX + shopKey(source);
 export function productDocument(input) {
   const product = { id: String(input?.id || ""), version: input?.version,
     name: String(input?.name || "").trim(), details: String(input?.details || "").trim(),
-    aliases: list(input?.aliases), skuNotes: String(input?.skuNotes || "").trim(), productIds: list(input?.productIds) };
+    aliases: list(input?.aliases), skuNotes: String(input?.skuNotes || "").trim(), productIds: list(input?.productIds), categoryId: categoryId(input?.categoryId) };
   if (!product.id || product.id.length > 100 || !Number.isSafeInteger(product.version) || product.version < 1 || !product.name || !product.details) {
     fail("请填写商品名称和资料正文，或重新打开有效资料。");
   }
@@ -74,7 +75,7 @@ export class ProductCatalog {
           if (catalog.products.some(other => other.productIds.some(id => product.productIds.includes(id)))) throw new Error("Duplicate link");
           catalog.products.push(product); catalog.revision++;
         }
-        patch[key] = { products: catalog.products, revision: catalog.revision };
+        patch[key] = { products: catalog.products, categoryIds: catalog.categoryIds, revision: catalog.revision };
       } catch { remaining.push(item); } // Invalid legacy material remains available for recovery.
     }
     if (Object.keys(patch).length) await this.storage.set({ ...patch, [PRODUCTS_KEY]: remaining });
@@ -86,19 +87,28 @@ export class ProductCatalog {
     const catalog = saved[key] || { products: [], revision: 0 };
     const legacyProducts = (saved[PRODUCTS_KEY] || []).filter(item => !item.binding ||
       (item.binding.platform === source.platform && item.binding.shopId === source.shopId)).map(({ id, name }) => ({ id, name }));
-    return { shop: shopKey(source), ...catalog, legacyProducts };
+    return { shop: shopKey(source), ...catalog, products: catalog.products.map(productDocument), categoryIds: categoryIds(catalog.categoryIds), legacyProducts };
   }
 
   async backup(source) {
     const [platform, market, shopId] = JSON.parse(shopKey(source));
-    return { version: 1, source: { platform, market, shopId }, products: (await this.read(source)).products.map(productDocument) };
+    const catalog = await this.read(source);
+    return { version: 2, source: { platform, market, shopId }, categoryIds: catalog.categoryIds, products: catalog.products };
+  }
+
+  async write(source, catalog, changes, extra = {}) {
+    const { products, categoryIds, revision } = { ...catalog, ...changes };
+    await this.storage.set({ ...extra, [catalogKey(source)]: { products, categoryIds, revision: revision + 1 } });
+    return this.read(source);
   }
 
   async restore(source, backup) {
-    if (backup?.version !== 1 || !Array.isArray(backup.products) || shopKey(backup.source) !== shopKey(source)) {
+    if (![1, 2].includes(backup?.version) || !Array.isArray(backup.products) ||
+        (backup.version === 2 && !Array.isArray(backup.categoryIds)) || shopKey(backup.source) !== shopKey(source)) {
       fail("备份不属于当前店铺，或文件格式不受支持。");
     }
     const catalog = await this.read(source), products = new Map(catalog.products.map(item => [item.id, productDocument(item)]));
+    const selected = backup.version === 2 ? categoryIds(backup.categoryIds) : catalog.categoryIds;
     for (const input of backup.products) {
       const product = productDocument(input), previous = products.get(product.id);
       if (previous && JSON.stringify(previous) !== JSON.stringify(product)) fail("备份与已有档案冲突，未覆盖任何资料。");
@@ -109,12 +119,17 @@ export class ProductCatalog {
       if (ids.has(id)) fail("备份包含重复商品关联，未导入任何资料。");
       ids.add(id);
     }
-    await this.storage.set({ [catalogKey(source)]: { products: [...products.values()], revision: catalog.revision + 1 } });
-    return this.read(source);
+    return this.write(source, catalog, { products: [...products.values()], categoryIds: selected });
   }
 
   async edit(source, action, payload) {
     const catalog = await this.read(source);
+    if (action === "SAVE_CATEGORIES") {
+      if (payload.revision !== catalog.revision) fail("店铺资料已改变，请重新打开类目页后保存。");
+      if (!Array.isArray(payload.categoryIds)) fail("请选择有效的店铺类目。");
+      const selected = categoryIds(payload.categoryIds);
+      return this.write(source, catalog, { categoryIds: selected });
+    }
     const previous = catalog.products.find(item => item.id === payload.id);
     let legacy;
     if (action === "IMPORT_LEGACY_PRODUCT") {
@@ -137,9 +152,6 @@ export class ProductCatalog {
       // A repeated legacy import never overwrites an already migrated document.
       products = action === "IMPORT_LEGACY_PRODUCT" && previous ? catalog.products : [...products, product];
     }
-    const patch = { [catalogKey(source)]: { products, revision: catalog.revision + 1 } };
-    if (legacy) patch[PRODUCTS_KEY] = legacy.filter(item => item.id !== payload.id);
-    await this.storage.set(patch);
-    return this.read(source);
+    return this.write(source, catalog, { products }, legacy ? { [PRODUCTS_KEY]: legacy.filter(item => item.id !== payload.id) } : {});
   }
 }

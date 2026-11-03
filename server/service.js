@@ -3,16 +3,18 @@ import { generateReply } from "./reply-generator.js";
 import { validateReview } from "../extension/review-context.js";
 import { productDocument, shopKey } from "../extension/product-catalog.js";
 import { RETENTION_MS, isActive, isFinished } from "../extension/model.js";
+import { categoryIds as normalizeCategories } from "../extension/categories.js";
 
 export const LEASE_MS = 90000;
 const fail = (message, status = 409) => { throw Object.assign(new Error(message), { status }); };
 
 function generationError(error, retryAt) {
   // Provider errors may echo buyer data; expose only fixed classifications.
-  const code = ["KEY_MISSING", "OUTPUT_INVALID", "INPUT_INVALID"].includes(error.code) ? error.code : "GENERATION_FAILED";
+  const code = ["KEY_MISSING", "OUTPUT_INVALID", "INPUT_INVALID", "COST_STORAGE_FAILED"].includes(error.code) ? error.code : "GENERATION_FAILED";
   const messages = {
     KEY_MISSING: "生成服务未配置模型 Key。",
     OUTPUT_INVALID: "模型输出未通过校验，请检查后继续。",
+    COST_STORAGE_FAILED: "费用记录无法保存，任务已暂停，未发起新的模型请求。请重新连接组件后继续。",
     401: "模型 Key 无效，请负责人通过安装向导更新模型账户。",
     402: "模型账户额度或支付受限，请检查 OpenRouter 账户。",
     404: "所选模型端点不可用，请负责人检查模型端点。",
@@ -33,18 +35,21 @@ export class ReplyService {
     this.runs = new Map();
   }
 
-  control(id, { source, generation, status }) {
+  control(id, { source, generation, status, costRoundId = null, categoryIds }) {
     this.cleanup();
     const shop = shopKey(source), previous = this.runs.get(id);
+    const selected = normalizeCategories(categoryIds === undefined ? previous?.categoryIds : categoryIds);
+    if (costRoundId !== null && (typeof costRoundId !== "string" || !/^[\w-]{1,100}$/.test(costRoundId))) fail("费用轮次无效。", 400);
     if (!Number.isSafeInteger(generation) || generation < 0 || !["running", "recovering", "paused", "completed", "ended"].includes(status)) fail("任务控制参数无效。", 400);
     if (previous && previous.shop !== shop) fail("任务不属于当前店铺。");
+    if (previous && generation === previous.generation && JSON.stringify(selected) !== JSON.stringify(previous.categoryIds)) fail("店铺类目已改变，请暂停后重新开始。");
     if (previous && (previous.generation > generation || (previous.generation === generation && status === "running" && previous.status !== "running"))) {
       fail("任务执行已失效，请暂停后重新开始。");
     }
     if (previous && (generation > previous.generation || status !== "running")) this.cancelCalls(previous);
     const expiresAt = isFinished({ status }) ? previous?.expiresAt || this.now() + RETENTION_MS : null;
     const run = previous || { operations: new Map() };
-    Object.assign(run, { shop, generation, status, heartbeat: this.now(), expiresAt });
+    Object.assign(run, { shop, generation, status, heartbeat: this.now(), expiresAt, costRoundId, categoryIds: selected });
     this.runs.set(id, run);
     return { status, generation, expiresAt };
   }
@@ -69,7 +74,7 @@ export class ReplyService {
     if (run.status !== "running") fail("任务未运行，不能生成回复。");
     review = structuredClone(validateReview(review));
     product = product === null ? null : productDocument(product);
-    const operationId = digest([id, generation, review.reviewId]), fingerprint = digest([review, product]);
+    const operationId = digest([id, generation, review.reviewId]), fingerprint = digest([review, product, run.categoryIds]);
     const previous = run.operations.get(operationId);
     if (previous) {
       if (previous.fingerprint !== fingerprint) fail("同一操作的评价或商品资料内容发生变化，请重新开始。");
@@ -77,14 +82,16 @@ export class ReplyService {
     }
     if (run.work) fail("该任务已有正在生成的评价。");
     run.operations.set(operationId, { fingerprint, status: "pending", data: null });
-    const work = { id: operationId, controller: new AbortController(), callState: null };
+    const work = { id: operationId, controller: new AbortController(), callState: null, categoryIds: [...run.categoryIds],
+      costs: this.costs?.forRun({ taskId: id, roundId: run.costRoundId, shop: run.shop }) };
     run.work = work;
     const current = () => this.runs.get(id)?.work === work && run.generation === generation && run.status === "running";
     const [platform, market, shopId] = JSON.parse(run.shop);
     Promise.resolve().then(() => {
       if (!current()) return;
-      return this.generate(review, { source: { platform, market, shopId }, products: product ? [product] : [],
-        settings: this.settings, signal: work.controller.signal, onStateChange: state => { if (current()) work.callState = state; } });
+      return this.generate(review, { source: { platform, market, shopId }, products: product ? [product] : [], categoryIds: work.categoryIds,
+        settings: this.settings, signal: work.controller.signal, costs: work.costs,
+        onStateChange: state => { if (current()) work.callState = state; } });
     }).then(result => {
       if (current()) Object.assign(run.operations.get(operationId), { status: "succeeded", data: result });
     }).catch(error => {

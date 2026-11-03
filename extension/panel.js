@@ -1,12 +1,16 @@
-import { counts, MANUAL_REASON, isActive, isFinished, emptyTask } from "./model.js";
+import { counts, readWarning, MANUAL_REASON, isActive, isFinished, emptyTask } from "./model.js";
 import { addFiles, releaseFile, releaseAllFiles, renderMedia } from "./media.js";
 import { initializeProducts } from "./products.js";
 import { $, element, sendMessage } from "./ui.js";
 import { createQueue } from "./queue.js";
 import { isReviewPage } from "./review-reader.js";
 import { renderReviews } from "./review-list.js";
+import { formatCost } from "./cost-store.js";
+import { shopKey } from "./product-catalog.js";
+import { APP_VERSION, COST_TRACKING_VERSION } from "./protocol.js";
 
 const tabs = ["tasks", "add", "manual"];
+const productTabs = ["products", "categories"];
 const enqueueDraft = createQueue();
 const enqueueSnapshot = createQueue();
 const pageMedia = new Map();
@@ -72,6 +76,12 @@ function applySnapshot(next, restoreDraft = false) {
       latestBindingRevision = next.bindingRevision;
     }
     const changedTask = context?.taskId && context.taskId !== next.taskId;
+    const changedShop = JSON.stringify(state?.reviewSource) !== JSON.stringify(next.state.reviewSource);
+    if (!changedTask && context?.costs && (next.costs?.revision < context.costs.revision || (next.costs?.epoch || 0) < (state?.costEpoch || 0))) next = { ...next, costs: context.costs };
+    if (context && !changedTask && next.costs && next.costs.revision >= (context.costs?.revision ?? -1)) {
+      context.costs = next.costs;
+      renderCosts();
+    }
     if (!changedTask && state && next.state.revision < state.revision) return;
     if (changedTask) pageMedia.set(context.taskId, { draftAttachments, attachments: state.reviews.flatMap(item => item.attachments), expiresAt: context.expiresAt });
     context = next;
@@ -94,6 +104,7 @@ function applySnapshot(next, restoreDraft = false) {
       loadDraft(next.draft);
       productEditor?.setContext(next.productDraft);
     }
+    productEditor?.setLocked(next.catalogLocked);
     if (changedTask) {
       const attached = new Set(state.reviews.flatMap(item => item.attachments.map(file => file.id)));
       draftAttachments = (pageMedia.get(next.taskId)?.draftAttachments || []).filter(file => !attached.has(file.id));
@@ -106,7 +117,7 @@ function applySnapshot(next, restoreDraft = false) {
       pageMedia.delete(id);
     }
     render();
-    if (activeTab === "products") void productEditor?.refresh();
+    if ((changedShop || changedTask || changedPage) && productTabs.includes(activeTab)) void productEditor?.refresh();
   });
 }
 
@@ -141,8 +152,8 @@ async function command(name, payload) {
 
 function switchTab(name, focus = false) {
   activeTab = name;
-  const productsOpen = name === "products";
-  if (!productsOpen) lastReviewTab = name;
+  const productsOpen = productTabs.includes(name);
+  if (tabs.includes(name)) lastReviewTab = name;
   $("open-products").setAttribute("aria-expanded", String(productsOpen));
   for (const tab of tabs) {
     const selected = tab === name;
@@ -151,7 +162,7 @@ function switchTab(name, focus = false) {
   }
   $("quick-add").hidden = name === "add";
   renderAccess();
-  if (focus) (productsOpen ? $("product-name") : $(`tab-${name}`)).focus();
+  if (focus) (name === "categories" ? $("categories-back") : productsOpen ? $("product-name") : $(`tab-${name}`)).focus();
   window.scrollTo({ top: 0, behavior: "instant" });
 }
 
@@ -177,11 +188,11 @@ function renderAccess() {
   $("read-reviews").disabled = blocked || !initialized || switchingPage || !context?.pageReady || readBusy || state?.reading || isActive(state) || !isReviewPage(context?.source?.url);
   $("read-reviews").textContent = state?.reading ? "正在读取…" : "读取未回复";
   $("read-reviews").title = isReviewPage(context?.source?.url) ? "读取全部评分的未回复评价，不提交店铺回复" : "请在 TikTok Shop 马来西亚站或新加坡站商品评分页打开插件";
-  document.querySelector(".tabs").hidden = blocked || activeTab === "products";
-  for (const name of [...tabs, "products"]) $(`view-${name}`).hidden = blocked || name !== activeTab;
+  document.querySelector(".tabs").hidden = blocked || productTabs.includes(activeTab);
+  for (const name of [...tabs, ...productTabs]) $(`view-${name}`).hidden = blocked || name !== activeTab;
   // Keep Pause available while processing; idle forms have their own actions.
   document.querySelector(".control-dock").hidden = blocked ||
-    (["add", "products"].includes(activeTab) && !isActive(state) && !state?.reading);
+    (["add", ...productTabs].includes(activeTab) && !isActive(state) && !state?.reading);
   if (blocked) {
     $("context-notice-title").textContent = context.busy ? "此窗口正在使用" : context.expired ? "记录已自动清理" : "来源页面已改变";
     $("context-notice-text").textContent = context.busy
@@ -216,23 +227,43 @@ function renderRecovery() {
   if (history.some(record => record.id === selected)) $("saved-records").value = selected;
 }
 
+function renderCosts() {
+  const demo = state?.mode !== "llm";
+  const real = !demo && state.reviewSource;
+  const costs = context?.costs;
+  const legacy = ["ready", "missing-key"].includes(context?.component?.status) && context.component.costTrackingVersion !== COST_TRACKING_VERSION;
+  const available = real && costs?.enabledAt && costs.taskId === context.taskId && (costs.epoch || 0) === (state.costEpoch || 0) && costs.shop === shopKey(state.reviewSource);
+  for (const [name, summary, since] of [["task", costs?.task, costs?.startedAt], ["shop", costs?.total, costs?.enabledAt]]) {
+    $(`${name}-cost`).textContent = !real ? "—" : legacy ? "需更新组件" : available ? formatCost(summary) : "—";
+    const time = since ? new Date(since).toLocaleString("zh-CN", { hour12: false }) : "";
+    $(`${name}-cost-help`).textContent = !real ? demo ? "演示任务不调用模型 API；读取店铺评价后显示费用。" : "尚未识别店铺；读取当前店铺评价后显示费用。" : legacy
+      ? "当前本机组件不支持费用记录，请同步更新组件；旧调用不会按零费用统计。" : !available
+      ? "连接支持费用记录的本机组件后开始统计，不导入旧任务费用。"
+      : `记录自 ${time}。单位美元，包含实际请求、重试和模型转人工；待确认项尚未计入金额。${name === "task" ? "清空评价后本次任务重新计费，旧请求归旧轮次。" : "按平台、站点和店铺在当前浏览器个人资料内长期累计，清空评价不会清零。"}`;
+  }
+}
+
 function render() {
+  renderCosts();
   if (!state) return;
   const totals = counts(state);
+  const warning = readWarning(state);
   $("component-status").textContent = context?.component?.message || "";
   const running = isActive(state) || state.reading;
   const displayStatus = pauseRequested ? "paused" : state.status;
-  $("count-pending").textContent = state.reviews.filter(review => review.status === "pending").length;
+  $("count-pending").textContent = totals.waiting;
   $("count-replied").textContent = totals.generated + totals.replied;
   $("result-count-label").textContent = state.mode === "llm" ? "已生成" : "模拟已回复";
-  $("read-summary").textContent = state.reviewSource ? `店铺未回复 ${state.pagination?.total ?? 0} 条` : "";
+  $("read-summary").textContent = !state.reviewSource ? "" : warning
+    ? `已读取 ${state.pagination.readCount} 条 · 平台显示 ${state.pagination.total} 条` : `店铺未回复 ${state.pagination?.total ?? 0} 条`;
   document.querySelectorAll('[data-command="SAMPLES"]').forEach(button => { button.hidden = state.mode === "llm"; });
   $("count-manual").textContent = totals.manual;
   $("manual-tab-count").textContent = totals.manual;
   $("manual-tab-count").hidden = !totals.manual;
   $("manual-page-count").textContent = `${totals.manual} 条`;
-  $("run-status").textContent = context.sourceAway ? "等待返回" : pauseRequested ? "正在暂停" : state.reading ? "读取中" : state.callState?.status === "retry_wait" ? "重试等待中" : runLabels[state.status];
+  $("run-status").textContent = context.sourceAway ? "等待返回" : pauseRequested ? "正在暂停" : state.reading ? "读取中" : state.callState?.status === "retry_wait" ? "重试等待中" : state.status === "completed" && warning ? "已读完成 · 数量待核对" : runLabels[state.status];
   $("run-status").dataset.status = displayStatus;
+  $("run-status").dataset.warning = Boolean(warning);
   $("task-empty").hidden = totals.total > 0;
   $("task-content").hidden = totals.total === 0;
   const processed = totals.replied + totals.generated + totals.manual;
@@ -242,10 +273,11 @@ function render() {
   $("progress-fill").style.transform = `scaleX(${progress})`;
   $("task-progress").setAttribute("aria-valuenow", String(Math.round(progress * 100)));
   $("clear-button").disabled = running;
-  $("error-banner").hidden = !state.error && !state.endReason;
-  $("error-banner").textContent = state.error || state.endReason;
+  $("error-banner").hidden = !state.error && !state.endReason && !warning;
+  $("error-banner").textContent = state.error || state.endReason || warning;
+  $("error-banner").classList.toggle("notice-warning", Boolean(warning) && !state.error && !state.endReason);
   const action = `${state.status === "paused" ? "继续" : "开始"}${state.mode === "llm" ? "生成" : "演示"}`;
-  $("run-button").textContent = context.sourceAway ? "等待返回" : pauseRequested ? "正在暂停…" : running ? "立即暂停" : state.status === "completed" ? "本轮已完成" : action;
+  $("run-button").textContent = context.sourceAway ? "等待返回" : pauseRequested ? "正在暂停…" : running ? "立即暂停" : state.status === "completed" ? warning ? "已读评价已完成" : "本轮已完成" : action;
   $("run-button").disabled = controlBusy || switchingPage || context.sourceAway || (!running && context.bound && !context.pageReady) ||
     (!running && state.mode === "llm" && (!context.pageReady || !isReviewPage(context.source?.url))) ||
     (!running && !totals.pending && !(state.mode === "llm" && state.status === "paused")) || state.status === "completed";
@@ -306,6 +338,31 @@ document.querySelector(".tabs").addEventListener("click", event => {
   if (button) switchTab(button.dataset.tab, true);
 });
 $("open-products").addEventListener("click", () => switchTab("products", true));
+async function checkComponentVersion() {
+  const button = $("check-component");
+  if (button.disabled) return;
+  button.disabled = true;
+  button.textContent = "检查中…";
+  $("update-status").textContent = "正在检查本机组件…";
+  try {
+    const { component } = await sendMessage({ type: "COMPONENT_CHECK" });
+    $("component-version").textContent = component.componentVersion ? `v${component.componentVersion}` : "未连接";
+    $("update-status").textContent = component.message;
+  } catch (error) {
+    $("component-version").textContent = "未连接";
+    $("update-status").textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "重新检查组件";
+  }
+}
+$("open-updates").addEventListener("click", () => {
+  $("extension-version").textContent = `v${APP_VERSION}`;
+  $("component-version").textContent = context?.component?.componentVersion ? `v${context.component.componentVersion}` : "检查中…";
+  $("update-dialog").showModal();
+  void checkComponentVersion();
+});
+$("check-component").addEventListener("click", () => { void checkComponentVersion(); });
 $("open-account").addEventListener("click", () => {
   $("account-error").hidden = true;
   $("account-dialog").showModal();
@@ -412,7 +469,7 @@ $("read-reviews").addEventListener("click", onAction(async () => {
   try {
     await command("READ_REVIEWS");
     switchTab("tasks");
-    notify(`已读取 ${state.pagination.total} 条店铺未回复评价，仅生成回复，不自动发布。`);
+    notify(readWarning(state) || `已读取 ${state.pagination.readCount ?? state.pagination.total} 条店铺未回复评价，仅生成回复，不自动发布。`);
   } finally { try { scope.check(); readBusy = false; renderAccess(); } catch {} }
 }));
 $("end-button").addEventListener("click", onAction(() => controlTask("END")));
@@ -537,7 +594,8 @@ async function initialize() {
   await applySnapshot(response.snapshot, true);
   if (context?.contextId) {
     connectPanel();
-    productEditor = initializeProducts({ notify, captureContext, initialDraft: context.productDraft });
+    productEditor = initializeProducts({ notify, captureContext, initialDraft: context.productDraft, showPage: name => switchTab(name, true) });
+    productEditor.setLocked(context.catalogLocked);
   }
   initialized = true;
   document.querySelectorAll("[data-initializing]").forEach(node => { node.inert = false; });

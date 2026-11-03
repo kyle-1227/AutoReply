@@ -4,7 +4,10 @@ import { WorkspaceStore, createRecord } from "./workspace-store.js";
 import { createQueue } from "./queue.js";
 import { readReviews, isReviewPage } from "./review-reader.js";
 import { generateReply, NativeClient } from "./native-client.js";
-import { ProductCatalog, catalogKey } from "./product-catalog.js";
+import { ProductCatalog, catalogKey, productDocument } from "./product-catalog.js";
+import { CostStore } from "./cost-store.js";
+import { COST_TRACKING_VERSION } from "./protocol.js";
+import { CATEGORY_RULES_VERSION, categoryIds } from "./categories.js";
 
 export const ordinaryPage = tab => Number.isInteger(tab?.id) && /^https?:\/\//.test(tab.url || "");
 export const panelPath = tab => `panel.html?tabId=${tab.id}&windowId=${tab.windowId}`;
@@ -21,11 +24,27 @@ export class TaskCoordinator {
     this.enqueue = createQueue();
     this.restoring = true;
     this.component = { status: "checking", message: "正在准备本机组件…" };
-    this.native = new NativeClient(browser.runtime, { onDisconnect: error => { void this.componentDisconnected(error).catch(console.error); } });
+    this.costs = new CostStore(browser.storage.local, { onChange: () => { if (!this.restoring) this.broadcastAll(); } });
+    this.native = new NativeClient(browser.runtime, {
+      onDisconnect: (error, sessionId) => {
+        void this.costs.disconnected(sessionId).catch(console.error);
+        void this.componentDisconnected(error).catch(console.error);
+      },
+      onCosts: event => this.costs.receive(event),
+      onHealth: async health => {
+        if (health.costTrackingVersion !== COST_TRACKING_VERSION) return;
+        await this.costs.activate(health.costSessionId);
+        const pending = this.costs.unresolved();
+        for (let index = 0; index < pending.length; index += 50) {
+          void this.native.rawRequest("cost_reconcile", { entries: pending.slice(index, index + 50) }).catch(() => {});
+        }
+      },
+    });
   }
 
   async initialize() {
     await this.store.load();
+    await this.costs.load();
     await this.catalog.load();
     for (const record of Object.values(this.store.data.records)) this.records.set(record.id, record);
     const session = (await this.browser.storage.session.get(BINDINGS_KEY))[BINDINGS_KEY];
@@ -84,10 +103,15 @@ export class TaskCoordinator {
         controlRun: async (payload, signal) => {
           if (this.runnerOptions.controlRun) return this.runnerOptions.controlRun(payload, signal);
           if (payload.status !== "running" && !this.native.connected) return;
-          if (payload.status === "running" && !(await this.native.request("health", {}, signal)).hasModelKey) {
-            throw new Error("请在插件的“模型账户”中填写 API Key，或通过安装向导配置。");
+          let costRoundId = null;
+          if (payload.status === "running") {
+            const health = await this.native.request("health", {}, signal);
+            if (!health.hasModelKey) throw new Error("请在插件的“模型账户”中填写 API Key，或通过安装向导配置。");
+            if (health.categoryRulesVersion !== CATEGORY_RULES_VERSION) throw new Error("请更新本机组件后再生成：当前组件不支持全品类与商品类目规则。");
+            if (health.costTrackingVersion === COST_TRACKING_VERSION) costRoundId = await this.costs.ensureRound(taskId, payload.source, this.runners.get(taskId).state.costEpoch || 0);
           }
-          return this.native.request("control", { taskId, ...payload }, signal);
+          signal?.throwIfAborted();
+          return this.native.request("control", { taskId, ...payload, categoryIds: this.runners.get(taskId).categorySnapshot || [], ...(costRoundId ? { costRoundId } : {}) }, signal);
         },
         generateReply: (review, options) => (this.runnerOptions.generateReply || generateReply)(review, {
           ...options, taskId, client: this.native, products: this.runners.get(taskId).productSnapshot || [],
@@ -210,7 +234,9 @@ export class TaskCoordinator {
       source: { tabId: context.tabId, windowId: context.windowId, url: context.url, title: context.title },
       bound: context.occupied, valid: true, busy: owner && owner.id !== contextId ? this.busySummary(owner) : null,
       draft: structuredClone(record.draft), productDraft: structuredClone(record.productDraft),
-      expiresAt: record.expiresAt, history: this.history(), legacyAvailable: this.store.hasLegacy(), component: { ...this.component } };
+      catalogLocked: record.state.reviewSource ? this.catalogLocked(record.state.reviewSource) : true,
+      expiresAt: record.expiresAt, history: this.history(), legacyAvailable: this.store.hasLegacy(), component: { ...this.component },
+      costs: this.costs.snapshot(context.taskId, this.runner(context.taskId).state.reviewSource, this.runner(context.taskId).state.costEpoch || 0) };
   }
 
   require(contextId, taskId, bindingRevision, draft = false) {
@@ -266,6 +292,7 @@ export class TaskCoordinator {
         default:
           if (name === "END" && !context.occupied) throw new Error("当前没有占用窗口的任务。");
           await runner.command(name, payload);
+          if (name === "CLEAR") await this.costs.reset(taskId);
           if (name === "END") await this.release(context);
       }
       this.broadcastWindow(context.windowId);
@@ -306,7 +333,11 @@ export class TaskCoordinator {
       throw new Error("请在已加载完成的店铺评论页开始生成。");
     }
     // Freeze this run's material in memory; it never enters saved task records.
-    if (runner.state.mode === "llm") runner.productSnapshot = (await this.catalog.read(runner.state.reviewSource)).products;
+    if (runner.state.mode === "llm") {
+      const catalog = await this.catalog.read(runner.state.reviewSource);
+      runner.productSnapshot = catalog.products;
+      runner.categorySnapshot = catalog.categoryIds;
+    }
     if (runner.generation !== expected) return;
     const wasOccupied = context.occupied;
     context.occupied = true;
@@ -369,13 +400,14 @@ export class TaskCoordinator {
     const state = this.runner(taskId).state;
     if (!isActive(state)) delete this.runner(taskId).productSnapshot;
     if (context.occupied && !holdsWindow(state)) await this.release(context, state.status === "completed");
-    this.broadcastWindow(context.windowId);
+    this.broadcastWindow(context.windowId, state.reviewSource);
     await this.onWindowChange(context.windowId);
   }
 
-  broadcastWindow(windowId) {
+  broadcastWindow(windowId, source = null) {
     for (const context of this.contexts.values()) {
-      if (context.windowId === windowId) this.onChange(this.snapshot(context.id));
+      const other = this.runner(context.taskId).state.reviewSource;
+      if (context.windowId === windowId || (source && other && catalogKey(source) === catalogKey(other))) this.onChange(this.snapshot(context.id));
     }
   }
   broadcastAll() { for (const context of this.contexts.values()) this.onChange(this.snapshot(context.id)); }
@@ -460,9 +492,10 @@ export class TaskCoordinator {
   async checkComponent() {
     try {
       const health = await this.native.request("health", {});
-      this.component = { status: health.hasModelKey ? "ready" : "missing-key", message: health.hasModelKey
-        ? "本机组件已就绪" : "请在“模型账户”填写 API Key。", canSaveKey: Boolean(health.canSaveKey) };
-    } catch (error) { this.component = { status: "unavailable", message: error.message }; }
+      this.component = { status: health.hasModelKey ? "ready" : "missing-key", message: health.categoryRulesVersion !== CATEGORY_RULES_VERSION
+        ? "请更新本机组件，以使用全品类与商品类目规则。" : health.hasModelKey ? "本机组件已就绪" : "请在“模型账户”填写 API Key。", canSaveKey: Boolean(health.canSaveKey),
+        componentVersion: health.componentVersion, costTrackingVersion: health.costTrackingVersion || 0, categoryRulesVersion: health.categoryRulesVersion || 0, promptVersion: health.promptVersion || null };
+    } catch (error) { this.component = { status: "unavailable", message: error.message, componentVersion: error.componentVersion || null }; }
     this.broadcastAll();
     return this.component;
   }
@@ -481,7 +514,7 @@ export class TaskCoordinator {
   componentDisconnected(error) {
     this.component = { status: "unavailable", message: error.message };
     const active = [...this.runners.values()].filter(runner => runner.state.mode === "llm" && isActive(runner.state));
-    return this.pauseRunners(active, "本机组件已断开，任务已暂停；点击继续时将自动连接。");
+    return this.pauseRunners(active, error.code === "COST_STORAGE_FAILED" ? error.message : "本机组件已断开，任务已暂停；点击继续时将自动连接。");
   }
 
   pauseRunners(runners, reason) {
@@ -499,7 +532,7 @@ export class TaskCoordinator {
       const source = this.runner(context.taskId).state.reviewSource;
       if (!source) {
         if (action !== "LIST") throw new Error("请先读取当前店铺评价。");
-        return { products: [], locked: true, shop: null, message: "先读取店铺评价，再管理该店铺资料。" };
+        return { products: [], categoryIds: [], revision: 0, locked: true, shop: null, message: "先读取店铺评价，再管理该店铺资料。" };
       }
       const locked = this.catalogLocked(source);
       if (action !== "LIST" && locked) throw new Error("当前店铺任务正在运行，请先暂停后修改资料。");
@@ -515,7 +548,11 @@ export class TaskCoordinator {
   catalogChanged(changes) {
     const affected = [...this.runners.values()].filter(runner => {
       const source = runner.state.reviewSource, change = source && changes[catalogKey(source)];
-      return change && isActive(runner.state) && JSON.stringify(change.newValue?.products || []) !== JSON.stringify(runner.productSnapshot || []);
+      if (!change || !isActive(runner.state)) return false;
+      try {
+        const products = (change.newValue?.products || []).map(productDocument), selected = categoryIds(change.newValue?.categoryIds);
+        return JSON.stringify(products) !== JSON.stringify(runner.productSnapshot || []) || JSON.stringify(selected) !== JSON.stringify(runner.categorySnapshot || []);
+      } catch { return true; } // Invalid restored material must also stop active work.
     });
     return this.pauseRunners(affected, "店铺资料已从环境同步更新，请确认资料后继续任务。");
   }
@@ -545,6 +582,7 @@ export class TaskCoordinator {
         }
       }
     });
+    await this.costs.cleanup(this.records.keys());
     await Promise.all([...this.runners.entries()].map(async ([id, runner]) => {
       if (!isActive(runner.state)) {
         await runner.syncRun().catch(() => {});

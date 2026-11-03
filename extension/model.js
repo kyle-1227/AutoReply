@@ -19,6 +19,7 @@ export function emptyTask() {
     status: "idle",
     reviews: [],
     currentId: null,
+    queueCursor: null,
     phase: 0,
     nextStepAt: null,
     error: "",
@@ -54,11 +55,18 @@ export function counts(task) {
   return task.reviews.reduce((result, review) => {
     result.total += 1;
     if (review.status === "pending" || review.status === "processing") result.pending += 1;
+    if (review.status === "pending") result.waiting += 1;
     if (review.status === "replied") result.replied += 1;
     if (review.status === "manual") result.manual += 1;
     if (review.status === "generated") result.generated += 1;
     return result;
-  }, { total: 0, pending: 0, replied: 0, generated: 0, manual: 0 });
+  }, { total: 0, pending: 0, waiting: 0, replied: 0, generated: 0, manual: 0 });
+}
+
+export function readWarning(task) {
+  const p = task?.pagination;
+  if (p?.complete !== false) return "";
+  return `平台显示 ${p.total} 条，已遍历 ${p.page} 页并读取 ${p.readCount} 条有效评价（去重 ${p.rawCount - p.readCount} 条），数量相差 ${Math.abs(p.total - p.readCount)} 条。仅处理已读取评价，不表示平台全部评价已处理。`;
 }
 
 export function floatingSummary(task, sourceAway = false) {
@@ -71,6 +79,7 @@ export function floatingSummary(task, sourceAway = false) {
     total: totals.total - totals.manual,
     manual: totals.manual,
     error: Boolean(task.error),
+    warning: Boolean(readWarning(task)),
   };
 }
 

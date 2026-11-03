@@ -4,3 +4,5 @@ releases/
 .playwright-cli/
 
 /.env
+tests/
+测试资料/

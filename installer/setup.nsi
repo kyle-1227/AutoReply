@@ -14,6 +14,7 @@
 Name "AutoReply"
 OutFile "${OUTPUT}"
 InstallDir "$LOCALAPPDATA\AutoReply"
+InstallDirRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AutoReply" "InstallLocation"
 RequestExecutionLevel user
 SetCompressor zlib
 VIProductVersion "${APP_VERSION}.0"
@@ -21,6 +22,7 @@ VIAddVersionKey "ProductName" "AutoReply"
 VIAddVersionKey "LegalCopyright" "AutoReply"
 VIAddVersionKey "FileDescription" "AutoReply 安装程序"
 VIAddVersionKey "FileVersion" "${APP_VERSION}"
+VIAddVersionKey "ProductVersion" "${APP_VERSION}"
 
 Var KeyInput
 Var KeyValue
@@ -45,10 +47,6 @@ Page custom KeyPage KeyPageLeave
 !macroend
 
 Function .onInit
-  ReadRegStr $0 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AutoReply" "InstallLocation"
-  ${If} $0 != ""
-    StrCpy $INSTDIR $0
-  ${EndIf}
   ${IfNot} ${RunningX64}
     MessageBox MB_OK|MB_ICONSTOP "当前安装包适用于 Windows 10 / 11 x64。"
     Abort
@@ -138,6 +136,8 @@ FunctionEnd
 
 Section "AutoReply"
   !insertmacro CheckNotRunning
+  ; Removed HTTP bridge is an owned legacy file, never user data.
+  Delete "$INSTDIR\extension\backend.js"
   SetOutPath "$INSTDIR"
   File /r "${PAYLOAD}\*"
   Call SaveKey

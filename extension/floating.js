@@ -21,6 +21,7 @@
     .manual.has-manual { color: #8b651b; }
     .completion.paused { color: #8b651b; }
     .completion.error { color: #a34d40; }
+    .completion.warning { color: #8b651b; white-space: normal; text-align: center; }
     .error-message { max-width: 156px; color: #a34d40; font-size: 13px; }
     [hidden] { display: none; }
   `;
@@ -52,8 +53,8 @@
     if (!summary || summary.revision < revision) return;
     revision = summary.revision;
     const labels = { idle: "未开始", running: "进行中", paused: "已暂停", recovering: "恢复中", completed: "已完成", ended: "已结束" };
-    completion.textContent = `${summary.sourceAway ? "等待返回" : summary.error ? "处理异常" : labels[summary.status] || "未开始"} ${summary.completed}/${summary.total}`;
-    completion.className = `completion${summary.status === "paused" ? " paused" : ""}${summary.error && !summary.sourceAway ? " error" : ""}`;
+    completion.textContent = `${summary.sourceAway ? "等待返回" : summary.error ? "处理异常" : summary.warning && summary.status === "completed" ? "已读完成，数量待核对" : labels[summary.status] || "未开始"} ${summary.completed}/${summary.total}`;
+    completion.className = `completion${summary.status === "paused" ? " paused" : ""}${summary.warning ? " warning" : ""}${summary.error && !summary.sourceAway ? " error" : ""}`;
     manual.textContent = `待人工 ${summary.manual}`;
     manual.classList.toggle("has-manual", summary.manual > 0);
     button.setAttribute("aria-label", `打开 AutoReply 侧边栏，${completion.textContent}，${manual.textContent}`);

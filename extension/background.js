@@ -138,7 +138,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     } catch (error) { respond({ ok: false, error: error.message }); }
     return true;
   }
-  const types = new Set(["HELLO", "COMMAND", "SUSPEND", "PRODUCTS", "BUSY_STATE", "CREDENTIALS"]);
+  const types = new Set(["HELLO", "COMMAND", "SUSPEND", "PRODUCTS", "BUSY_STATE", "CREDENTIALS", "COMPONENT_CHECK"]);
   if (!types.has(message?.type)) return;
   const operation = async () => {
     await ready;
@@ -147,6 +147,10 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       if (!url.href.startsWith(chrome.runtime.getURL("busy.html?"))) throw new Error("无法读取窗口状态。");
       const owner = coordinator.owner(Number(url.searchParams.get("windowId")));
       return { busy: owner ? coordinator.busySummary(owner) : null };
+    }
+    if (message.type === "COMPONENT_CHECK") {
+      panelIdentity(sender, message, true);
+      return { component: await coordinator.checkComponent() };
     }
     if (message.type === "HELLO") {
       const identity = panelIdentity(sender, message, true);
@@ -162,9 +166,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       return {};
     }
     if (message.type === "PRODUCTS") {
-      const result = await coordinator.products(context, message.action, message.payload || {});
-      if (!["LIST", "EXPORT"].includes(message.action)) chrome.runtime.sendMessage({ type: "PRODUCTS_CHANGED", shop: result.shop }).catch(() => {});
-      return result;
+      return coordinator.products(context, message.action, message.payload || {});
     }
     if (message.command === "READ_REVIEWS") return { snapshot: await coordinator.read(context.id, context.taskId, context.bindingRevision) };
     const commands = ["GET_STATE", "START", "PAUSE", "END", "ADD", "SAMPLES", "MANUAL", "ATTACHMENTS", "REMOVE", "CLEAR", "DRAFT", "PRODUCT_DRAFT", "IMPORT_LEGACY", "RESTORE_RECORD"];
@@ -203,7 +205,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local" || !Object.keys(changes).some(key => key.startsWith(CATALOG_PREFIX))) return;
   afterReady(async () => {
     await coordinator.catalogChanged(changes);
-    await chrome.runtime.sendMessage({ type: "PRODUCTS_CHANGED" }).catch(() => {});
+    const shops = Object.keys(changes).filter(key => key.startsWith(CATALOG_PREFIX)).map(key => key.slice(CATALOG_PREFIX.length));
+    await chrome.runtime.sendMessage({ type: "PRODUCTS_CHANGED", shops }).catch(() => {});
   });
 });
 chrome.runtime.onInstalled.addListener(() => ready.catch(console.error));

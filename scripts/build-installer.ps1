@@ -1,12 +1,5 @@
 ﻿param([string]$NsisCompiler = $env:NSIS_EXE)
 . (Join-Path $PSScriptRoot 'build-common.ps1')
-function Get-Sha256([string]$Path) {
-    $algorithm = [Security.Cryptography.SHA256]::Create()
-    $stream = [IO.File]::OpenRead($Path)
-    try { return -join ($algorithm.ComputeHash($stream) | ForEach-Object { $_.ToString('x2') }) }
-    finally { $stream.Dispose(); $algorithm.Dispose() }
-}
-
 if (-not $NsisCompiler) {
     $candidates = @((Join-Path ${env:ProgramFiles(x86)} 'NSIS\makensis.exe'), (Join-Path $env:ProgramFiles 'NSIS\makensis.exe'),
         (Join-Path $env:LOCALAPPDATA 'AutoReplyBuild\tools\nsis\makensis.exe'))
@@ -33,7 +26,14 @@ Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/nodejs/node/v24.14.0/L
 foreach ($directory in @('server', 'extension')) { Copy-Item -LiteralPath (Join-Path $projectRoot $directory) -Destination $payload -Recurse -Force }
 foreach ($file in (@('package.json') + $documentation)) { Copy-Item -LiteralPath (Join-Path $projectRoot $file) -Destination $payload -Force }
 $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
-& $compiler /nologo /target:winexe /reference:System.Security.dll "/out:$(Join-Path $payload 'AutoReplyHost.exe')" (Join-Path $projectRoot 'installer\NativeHost.cs')
+$assemblyInfo = Join-Path (Split-Path -Parent $payload) 'AssemblyInfo.cs'
+@"
+using System.Reflection;
+[assembly: AssemblyVersion("$($metadata.version).0")]
+[assembly: AssemblyFileVersion("$($metadata.version).0")]
+[assembly: AssemblyInformationalVersion("$($metadata.version)")]
+"@ | Set-Content -LiteralPath $assemblyInfo -Encoding UTF8
+& $compiler /nologo /target:winexe /reference:System.Security.dll "/out:$(Join-Path $payload 'AutoReplyHost.exe')" (Join-Path $projectRoot 'installer\NativeHost.cs') $assemblyInfo
 if ($LASTEXITCODE -ne 0) { throw 'Native launcher compilation failed.' }
 
 $publicKey = [Convert]::FromBase64String((Get-Content -LiteralPath (Join-Path $payload 'extension\manifest.json') -Encoding UTF8 -Raw | ConvertFrom-Json).key)
@@ -46,4 +46,5 @@ $hostManifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $payload 'n
 $outputFile = Join-Path $releaseRoot "AutoReply-Setup-$($metadata.version)-win-x64.exe"
 & $NsisCompiler "/DAPP_VERSION=$($metadata.version)" "/DPAYLOAD=$payload" "/DOUTPUT=$outputFile" (Join-Path $projectRoot 'installer\setup.nsi')
 if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
+Write-ReleaseIndex
 Write-Output $outputFile
