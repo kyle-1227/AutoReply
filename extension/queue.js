@@ -7,3 +7,18 @@ export function createQueue() {
     return next;
   };
 }
+
+export function waitForDelay(ms, signal) {
+  return new Promise((resolve, reject) => {
+    signal?.throwIfAborted();
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    }, ms);
+    function abort() {
+      clearTimeout(timer);
+      reject(signal.reason);
+    }
+    signal?.addEventListener("abort", abort, { once: true });
+  });
+}

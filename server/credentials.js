@@ -16,9 +16,10 @@ function keyTool(executable, action, input = "") {
 }
 
 export class Credentials {
-  constructor(directory, run = keyTool) {
+  constructor(directory, run = keyTool, { filename = "openrouter-key.dat", readAction = "--read-key", saveAction = "--save-key" } = {}) {
     this.executable = join(directory, "AutoReplyHost.exe");
-    this.file = join(directory, "config", "openrouter-key.dat");
+    this.file = join(directory, "config", filename);
+    Object.assign(this, { readAction, saveAction });
     this.run = run;
     this.signature = null;
     this.enqueue = createQueue();
@@ -30,7 +31,7 @@ export class Credentials {
     catch (error) { if (error.code !== "ENOENT") throw unavailable(); }
     const signature = file ? `${file.mtimeNs}:${file.ctimeNs}:${file.ino}:${file.size}` : "missing";
     if (signature === this.signature) return;
-    settings.apiKey = file ? await this.run(this.executable, "--read-key") : "";
+    settings.apiKey = file ? await this.run(this.executable, this.readAction) : "";
     this.signature = signature;
   }
 
@@ -42,7 +43,7 @@ export class Credentials {
       return Promise.reject(Object.assign(new Error("请填写有效的 API Key，不要包含换行或空格。"), { code: "INPUT_INVALID", status: 400 }));
     }
     return this.enqueue(async () => {
-      await this.run(this.executable, "--save-key", key);
+      await this.run(this.executable, this.saveAction, key);
       this.signature = null;
       await this.read(settings);
       if (!settings.apiKey) throw unavailable();

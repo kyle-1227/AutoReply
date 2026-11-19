@@ -10,6 +10,7 @@ export const STEP_MS = 1800;
 export const MANUAL_REASON = "运营手动标记，待人工后续处理。";
 export const isActive = task => task?.status === "running" || task?.status === "recovering";
 export const isFinished = task => task?.status === "completed" || task?.status === "ended";
+export const hasFailedReviews = task => Boolean(task?.reviews?.some(review => review.status === "failed"));
 export const holdsWindow = task => isActive(task) || task?.status === "paused";
 
 export function emptyTask() {
@@ -59,8 +60,9 @@ export function counts(task) {
     if (review.status === "replied") result.replied += 1;
     if (review.status === "manual") result.manual += 1;
     if (review.status === "generated") result.generated += 1;
+    if (review.status === "failed") result.failed += 1;
     return result;
-  }, { total: 0, pending: 0, waiting: 0, replied: 0, generated: 0, manual: 0 });
+  }, { total: 0, pending: 0, waiting: 0, replied: 0, generated: 0, manual: 0, failed: 0 });
 }
 
 export function readWarning(task) {
@@ -78,6 +80,7 @@ export function floatingSummary(task, sourceAway = false) {
     completed: totals.replied + totals.generated,
     total: totals.total - totals.manual,
     manual: totals.manual,
+    failed: totals.failed,
     error: Boolean(task.error),
     warning: Boolean(readWarning(task)),
   };

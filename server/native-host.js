@@ -8,15 +8,22 @@ import { isActive } from "../extension/model.js";
 import { CostTracker } from "./cost-tracker.js";
 import { CATEGORY_RULES_VERSION } from "../extension/categories.js";
 import { DEFAULT_PROMPT } from "./prompt-rules.js";
+import { UpdateService } from "./update-service.js";
+import { UPDATE_FIELDS, UPDATE_VERSION } from "../extension/update-protocol.js";
 
-const fail = message => { throw Object.assign(new Error(message), { status: 400, code: "INPUT_INVALID" }); };
+const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status, code: "INPUT_INVALID" }); };
 
 export function dispatch(service, command, payload, credentials = null) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) fail("请求参数格式无效。");
   if (command === "health") return { protocolVersion: PROTOCOL_VERSION, componentVersion: APP_VERSION,
     hasModelKey: Boolean(service.settings.apiKey), canSaveKey: Boolean(credentials),
     costTrackingVersion: service.costs ? COST_TRACKING_VERSION : 0, costSessionId: service.costs?.sessionId || null,
-    categoryRulesVersion: CATEGORY_RULES_VERSION, promptVersion: DEFAULT_PROMPT.version };
+    categoryRulesVersion: CATEGORY_RULES_VERSION, promptVersion: DEFAULT_PROMPT.version, updateProtocolVersion: service.updates ? UPDATE_VERSION : 0 };
+  if (Object.hasOwn(UPDATE_FIELDS, command)) {
+    if (!service.updates) fail("请先安装支持一键更新的配套组件。");
+    if (Object.keys(payload).some(key => !UPDATE_FIELDS[command].includes(key))) fail("更新操作包含不支持的参数。");
+    return service.updates.command(command, payload);
+  }
   if (command === "cost_ack") return service.costs?.acknowledge(payload) || { acknowledged: false };
   if (command === "cost_reconcile") return service.costs?.reconcile(payload.entries) || { accepted: false };
   if (command === "credentials") {
@@ -41,13 +48,14 @@ export function dispatch(service, command, payload, credentials = null) {
 }
 
 // Each stdout write is one complete frame. No logs or credentials enter stdout.
-export function startHost(service, { input = process.stdin, output = process.stdout, credentials = null } = {}) {
+export function startHost(service, { input = process.stdin, output = process.stdout, credentials = null, updateRoot, updateOptions = {} } = {}) {
   let buffer = Buffer.alloc(0), closed = false;
   const timer = setInterval(() => service.cleanup(), 60000);
   const close = () => {
     if (closed) return;
     closed = true; clearInterval(timer); buffer = Buffer.alloc(0); service.costs?.close(); service.close();
     input.removeListener("data", receive);
+    void service.updates?.close();
   };
   const send = message => {
     if (closed) return;
@@ -58,10 +66,15 @@ export function startHost(service, { input = process.stdin, output = process.std
     output.write(Buffer.concat([header, body]));
   };
   service.costs = new CostTracker({ settings: service.settings, send });
+  if (updateRoot) service.updates = new UpdateService({ root: updateRoot, send, prepare: () => {
+    for (const run of service.runs.values()) { service.cancelCalls(run); run.status = "paused"; }
+  }, ...updateOptions });
   const handle = async message => {
     const requestId = message?.requestId;
     try {
       if (typeof requestId !== "string" || requestId.length > 100) fail("请求标识无效。");
+      await service.updates?.ready;
+      if (service.updates && (message.command === "generate" || message.command === "credentials" || message.command === "control" && message.payload?.status === "running") && await service.updates.blocked()) fail("正在更新，任务保持暂停，请在更新完成后继续。", 409);
       if (credentials && ["health", "control", "generate", "cost_reconcile"].includes(message.command)) await credentials.refresh(service.settings);
       const data = await dispatch(service, message.command, message.payload, credentials);
       send({ requestId, ok: true, data });
@@ -92,7 +105,7 @@ export function startHost(service, { input = process.stdin, output = process.std
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const service = new ReplyService({ settings: { ...DEFAULT_SETTINGS } });
   const credentials = new Credentials(fileURLToPath(new URL("..", import.meta.url)));
-  const close = startHost(service, { credentials });
+  const close = startHost(service, { credentials, ...(process.env.AUTOREPLY_UPDATE_HEALTH === "1" ? {} : { updateRoot: fileURLToPath(new URL("..", import.meta.url)) }) });
   process.once("SIGTERM", () => { close(); process.exit(0); });
   process.once("SIGINT", () => { close(); process.exit(0); });
 }

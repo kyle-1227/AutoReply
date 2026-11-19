@@ -1,26 +1,28 @@
-import { emptyTask, newReview, demoReviews, demoReply, STEP_MS, MANUAL_REASON, isActive, isFinished } from "./model.js";
+import { emptyTask, newReview, demoReviews, demoReply, STEP_MS, MANUAL_REASON, isActive, isFinished, hasFailedReviews } from "./model.js";
 import { createQueue } from "./queue.js";
-import { reviewIdentity, validateReviewBatch } from "./review-context.js";
+import { reviewIdentity, validateReviewBatch, readFailureRecord } from "./review-context.js";
 import { pendingReviews, reviewProductId } from "./review-queue.js";
 
 // CDN signatures/hosts can rotate without the buyer editing the attached media.
-const reviewContent = review => JSON.stringify({ ...review,
-  attachments: review.attachments.map(({ kind, url }) => ({ kind, path: new URL(url).pathname })),
-});
+// Explicit fields keep comparisons stable when browser storage reorders object keys.
+const reviewContent = review => JSON.stringify([review.reviewId, review.text, review.rating, review.modifiedAt,
+  review.product.productId, review.product.skuId, review.product.title, review.product.variant,
+  review.platformReply.count, review.platformReply.canReply,
+  review.attachments.map(({ kind, url }) => [kind, new URL(url).pathname]),
+]);
 
 /**
  * One owner for a task queue. Storage, generation and browser reads are injected so
  * cancellation/recovery behavior can be checked without launching a browser.
  */
 export class TaskRunner {
-  constructor({ load, save, publish = () => {}, wakeup = async () => {}, now = Date.now,
+  constructor({ load, save, onChange = () => {}, wakeup = async () => {}, now = Date.now,
     setTimer = (callback, delay) => setTimeout(callback, delay),
     clearTimer = timer => clearTimeout(timer), stepMs = STEP_MS, canProcess = async () => true,
     readReviews, generateReply, canRead = async () => true, controlRun = async () => {} }) {
-    Object.assign(this, { load, save, publish, wakeup, now, setTimer, clearTimer, stepMs, canProcess, readReviews, generateReply, canRead, controlRun });
+    Object.assign(this, { load, save, onChange, wakeup, now, setTimer, clearTimer, stepMs, canProcess, readReviews, generateReply, canRead, controlRun });
     this.state = emptyTask();
     this.enqueue = createQueue();
-    this.generation = 0;
     this.timer = null;
     this.work = null;
     this.controlAbort = null;
@@ -32,9 +34,10 @@ export class TaskRunner {
     return structuredClone(this.state);
   }
 
+  get generation() { return this.state.generation; }
+
   cancelTick() {
-    this.generation += 1;
-    this.state.generation = this.generation;
+    this.state.generation += 1;
     this.clearTimer(this.timer);
     this.timer = null;
     this.controlAbort?.abort();
@@ -59,8 +62,7 @@ export class TaskRunner {
   async restore({ newBrowserSession = false } = {}) {
     const saved = await this.load();
     if (saved?.version === 1 && Array.isArray(saved.reviews)) this.state = { ...emptyTask(), ...saved, reading: false, callState: null };
-    this.generation = (this.state.generation || 0) + 1;
-    this.state.generation = this.generation;
+    this.state.generation = (this.state.generation || 0) + 1;
     if (this.state.status === "ended") this.resetCurrent();
     if (isActive(this.state) && (newBrowserSession || this.state.mode === "llm")) {
       this.resetCurrent();
@@ -106,7 +108,7 @@ export class TaskRunner {
     this.controlAbort = controller;
     try {
       const result = await this.controlRun({ source: this.state.reviewSource, generation: this.generation, status: this.state.status }, controller.signal);
-      if (result?.expiresAt) this.state.expiresAt = result.expiresAt;
+      if (result?.expiresAt && !hasFailedReviews(this.state)) this.state.expiresAt = result.expiresAt;
       controller.signal.throwIfAborted();
       this.lastControl = key;
     } finally { if (this.controlAbort === controller) this.controlAbort = null; }
@@ -114,6 +116,7 @@ export class TaskRunner {
 
   async commit() {
     if (isFinished(this.state)) this.state.queueCursor = null;
+    if (hasFailedReviews(this.state)) delete this.state.expiresAt;
     this.state.revision += 1;
     try {
       try { await this.syncRun(); }
@@ -131,10 +134,10 @@ export class TaskRunner {
       // Local cancellation stays immediate even when the backend is unavailable.
       void this.syncRun().catch(() => {});
       await this.save(this.snapshot()).catch(() => {});
-      this.publish(this.snapshot());
+      this.onChange();
       throw error;
     }
-    this.publish(this.snapshot());
+    this.onChange();
     this.schedule();
   }
 
@@ -192,9 +195,10 @@ export class TaskRunner {
       .map(review => [reviewIdentity(review.source, review.platformReview), review]));
     const present = new Set(batch.reviews.map(review => reviewIdentity(batch.source, review)));
     for (const [key, review] of previous) {
-      if (!present.has(key) && review.status === "pending") {
+      if (!present.has(key) && ["pending", "failed"].includes(review.status)) {
         review.status = "manual";
         review.manualReason = "本次未回复列表中已不存在该评价，请人工核对店铺状态。";
+        delete this.state.expiresAt;
       }
     }
     let added = 0;
@@ -203,7 +207,7 @@ export class TaskRunner {
       let review = previous.get(identity);
       const eligible = input.platformReply.count === 0 && input.platformReply.canReply;
       if (!eligible) {
-        if (review?.status === "pending") { review.status = "manual"; review.manualReason = "店铺评价已回复或当前不允许回复，请人工核对。"; }
+        if (["pending", "failed"].includes(review?.status)) { review.status = "manual"; review.manualReason = "店铺评价已回复或当前不允许回复，请人工核对。"; delete this.state.expiresAt; }
         continue;
       }
       if (!review) {
@@ -213,10 +217,10 @@ export class TaskRunner {
         previous.set(identity, review);
         added++;
       } else if (reviewContent(review.platformReview) !== reviewContent(input)) {
-        const manual = review.status === "manual";
-        Object.assign(review, { text: input.text, status: manual ? "manual" : "pending",
+        const preserved = ["manual", "failed"].includes(review.status);
+        Object.assign(review, { text: input.text, status: preserved ? review.status : "pending",
           reply: "", generationRecord: null, completedAt: null, retryAt: null });
-        if (!manual) { review.manualReason = ""; added++; }
+        if (!preserved) { review.manualReason = ""; added++; }
       }
       // Refresh signed media URLs even when the review itself has not changed.
       review.platformReview = structuredClone(input);
@@ -266,6 +270,15 @@ export class TaskRunner {
     void this.runGeneration(work).catch(() => {}); // commit publishes storage failures.
   }
 
+  advanceAfterReview(review) {
+    this.state.queueCursor = { productId: reviewProductId(review), reviewId: null };
+    this.work = null;
+    this.state.callState = null;
+    this.state.currentId = null;
+    this.claimNext();
+    return this.commit();
+  }
+
   async runGeneration(work) {
     const current = () => this.work === work && work.generation === this.generation && this.state.status === "running";
     const review = this.state.reviews.find(item => item.id === this.state.currentId);
@@ -305,20 +318,23 @@ export class TaskRunner {
         review.status = generated.result.decision === "reply" ? "generated" : "manual";
         review.manualReason = generated.result.reason;
         review.generationRecord = { ...generated.record, result: generated.result };
+        delete review.failureRecord;
         review.completedAt = this.now();
         review.retryAt = null;
-        this.state.queueCursor = { productId: reviewProductId(review), reviewId: null };
-        this.work = null;
-        this.state.callState = null;
-        this.state.currentId = null;
-        this.claimNext();
-        await this.commit();
+        await this.advanceAfterReview(review);
       });
     } catch (error) {
       if (!current()) return;
       await this.enqueue(async () => {
         if (!current()) return;
-        const known = ["INPUT_INVALID", "OUTPUT_INVALID", "CONTEXT_INVALID", "MEDIA_UNAVAILABLE", "KEY_MISSING", "RETRY_WAIT", "PAGE_READ_FAILED", "GENERATION_FAILED", "COST_STORAGE_FAILED"];
+        const failure = error.code === "VIDEO_FALLBACK_FAILED" && readFailureRecord(error.failureRecord);
+        if (failure && review) {
+          if (!await this.canProcess() || !current()) return;
+          Object.assign(review, { status: "failed", failureRecord: failure, reply: "", completedAt: null, retryAt: null, generationRecord: null });
+          await this.advanceAfterReview(review);
+          return;
+        }
+        const known = ["INPUT_INVALID", "OUTPUT_INVALID", "MODEL_REFUSED", "CONTEXT_INVALID", "MEDIA_UNAVAILABLE", "KEY_MISSING", "RETRY_WAIT", "PAGE_READ_FAILED", "GENERATION_FAILED", "COST_STORAGE_FAILED"];
         this.cancelTick();
         this.resetCurrent();
         this.state.status = "paused";
@@ -330,6 +346,13 @@ export class TaskRunner {
     }
   }
 
+  startProcessing() {
+    this.cancelTick();
+    this.state.status = "running";
+    this.needsScan = this.state.mode === "llm" && Boolean(this.state.reviewSource);
+    this.claimNext();
+  }
+
   command(type, payload = {}) {
     // Invalidate a queued/late timer before waiting for any pending storage write.
     if (["PAUSE", "END", "RECONNECTING"].includes(type)) this.cancelTick();
@@ -339,12 +362,9 @@ export class TaskRunner {
       switch (type) {
         case "START":
           if (this.state.status === "running") return this.snapshot();
-          this.cancelTick();
           delete this.state.expiresAt;
-          this.state.status = "running";
-          this.needsScan = this.state.mode === "llm" && Boolean(this.state.reviewSource);
           this.state.endReason = "";
-          this.claimNext();
+          this.startProcessing();
           break;
         case "PAUSE":
           if (isActive(this.state) || this.work || this.state.status === "idle") {
@@ -360,12 +380,7 @@ export class TaskRunner {
           }
           break;
         case "RECONNECTED":
-          if (this.state.status === "recovering") {
-            this.cancelTick();
-            this.state.status = "running";
-            this.needsScan = this.state.mode === "llm" && Boolean(this.state.reviewSource);
-            this.claimNext();
-          }
+          if (this.state.status === "recovering") this.startProcessing();
           break;
         case "END":
           this.resetCurrent();
@@ -381,11 +396,21 @@ export class TaskRunner {
           if (isFinished(this.state)) this.state.status = "idle";
           this.claimNext();
           break;
+        case "RETRY_FAILED": {
+          const selected = this.retryReviews(payload);
+          selected.forEach(review => { review.status = "pending"; review.retryAt = null; });
+          delete this.state.expiresAt;
+          this.state.endReason = "";
+          if (isActive(this.state)) this.claimNext();
+          else this.startProcessing();
+          break;
+        }
         case "MANUAL": {
           const review = this.getReview(payload.id);
-          if (review.status !== "pending") throw new Error("请先暂停当前处理，再标记尚未完成的评价。");
+          if (!["pending", "failed"].includes(review.status)) throw new Error("请先暂停当前处理，再标记尚未完成的评价。");
           review.status = "manual";
           review.manualReason = String(payload.reason || "").trim() || MANUAL_REASON;
+          delete this.state.expiresAt;
           break;
         }
         case "ATTACHMENTS": {
@@ -396,8 +421,9 @@ export class TaskRunner {
         }
         case "REMOVE": {
           const review = this.getReview(payload.id);
-          if (review.status !== "pending") throw new Error("只能移除尚未处理的评价。");
+          if (!["pending", "failed"].includes(review.status)) throw new Error("只能移除待处理或失败的评价。");
           this.state.reviews = this.state.reviews.filter(item => item.id !== review.id);
+          delete this.state.expiresAt;
           break;
         }
         case "CLEAR": {
@@ -419,6 +445,13 @@ export class TaskRunner {
       await this.commit();
       return this.snapshot();
     });
+  }
+
+  retryReviews(payload) {
+    const selected = payload?.all === true && Object.keys(payload).length === 1 ? this.state.reviews.filter(review => review.status === "failed") :
+      typeof payload?.id === "string" && Object.keys(payload).length === 1 ? [this.getReview(payload.id)] : [];
+    if (!selected.length || selected.some(review => review.status !== "failed")) throw new Error("没有可重试的失败评价，请刷新列表。");
+    return selected;
   }
 
   getReview(id) {

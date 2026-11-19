@@ -5,6 +5,28 @@ function invalid(message, code = "INPUT_INVALID") {
 const object = value => value && typeof value === "object" && !Array.isArray(value);
 const text = value => typeof value === "string" && Boolean(value.trim());
 const nullableText = value => value === null || typeof value === "string";
+export const FAILURE_REASONS = Object.freeze({ endpoint_unavailable: "端点不可用", rate_limited: "服务限流", timeout: "请求超时",
+  network: "网络错误", output_invalid: "输出格式不合规", http_error: "服务请求失败", refused: "模型拒绝处理", unknown: "调用失败" });
+
+// Only technical fields cross the native boundary; discard all other properties.
+export function readFailureRecord(value) {
+  const route = value?.routing;
+  const model = name => typeof name === "string" && /^[\w.:-]+\/[\w.:/-]{1,180}$/.test(name);
+  if (!object(value) || !Number.isFinite(value.occurredAt) || value.occurredAt < 0 || !object(route) ||
+      !model(route.primaryModel) || !model(route.fallbackModel) || route.videoOmitted !== true ||
+      typeof route.trigger !== "string" || !Object.hasOwn(FAILURE_REASONS, route.trigger) || !Array.isArray(route.attempts) || route.attempts.length !== 2) return null;
+  const attempts = route.attempts.map((attempt, i) => {
+    if (!object(attempt) || attempt.stage !== (i ? "haiku" : "video") || attempt.outcome !== "failed" ||
+        attempt.model !== (i ? route.fallbackModel : route.primaryModel) || typeof attempt.reasonCode !== "string" || !Object.hasOwn(FAILURE_REASONS, attempt.reasonCode) ||
+        !(attempt.httpStatus === null || Number.isInteger(attempt.httpStatus) && attempt.httpStatus >= 100 && attempt.httpStatus <= 599) ||
+        !(attempt.requestId === null || typeof attempt.requestId === "string" && /^gen-[\w-]{1,190}$/.test(attempt.requestId))) return null;
+    return { stage: attempt.stage, model: attempt.model, outcome: "failed", reasonCode: attempt.reasonCode,
+      httpStatus: attempt.httpStatus, requestId: attempt.requestId };
+  });
+  if (attempts.some(attempt => !attempt)) return null;
+  return { occurredAt: value.occurredAt, routing: { primaryModel: route.primaryModel, fallbackModel: route.fallbackModel,
+    videoOmitted: true, trigger: route.trigger, attempts } };
+}
 export const reviewIdentity = (source, review) => JSON.stringify([source.platform, source.market, source.shopId, review.reviewId]);
 
 export function validateReview(review) {

@@ -59,6 +59,7 @@ export async function requestLlm({ apiKey, model, messages, parameters = {}, sig
     if (!response.ok || (apiError && typeof apiError === "object")) {
       const error = new Error(apiError?.message || `LLM 请求失败（HTTP ${response.status}）。`);
       error.status = response.status;
+      if (typeof data?.id === "string") error.requestId = data.id;
       if (apiError?.code !== undefined) error.code = apiError.code;
       const retryAfter = response.headers.get("Retry-After");
       if (retryAfter !== null) error.retryAfter = retryAfter;

@@ -1,4 +1,5 @@
 import { requestLlm } from "./llm-client.js";
+import { waitForDelay } from "../extension/queue.js";
 
 const RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const MAX_ATTEMPTS = 3;
@@ -12,14 +13,20 @@ function retryTime(value) {
   return Number.isFinite(time) ? Math.max(Date.now(), time) : 0;
 }
 
-function canRetry(error) {
+export function errorStatus(error) {
   const status = error?.status === 200 && ["number", "string"].includes(typeof error.code)
     ? Number(error.code) : error?.status;
+  return Number.isInteger(status) && status >= 100 && status <= 599 ? status : null;
+}
+
+function canRetry(error) {
+  const status = errorStatus(error);
   return error?.isNetworkError === true || error?.name === "TimeoutError" || RETRY_STATUSES.has(status);
 }
 
 /** 一次逻辑调用复用一个控制器；业务任务负责保管控制器及接收完整结果。 */
-export function createLlmCall(request, { onStateChange } = {}) {
+export function createLlmCall(request, { onStateChange, maxAttempts = MAX_ATTEMPTS } = {}) {
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > MAX_ATTEMPTS) throw new RangeError("调用尝试次数无效。");
   let args = { ...request };
   const externalSignal = args.signal;
   delete args.signal;
@@ -29,14 +36,13 @@ export function createLlmCall(request, { onStateChange } = {}) {
   }
 
   const state = { status: "idle", attempt: 0, nextRetryAt: null, error: null };
-  let generation = 0;
   let active = null;
   let lastPromise = null;
   let lastError = null;
   let notBefore = 0;
   let stopReason = null;
   const getState = () => structuredClone(state);
-  const current = run => active === run && generation === run.generation;
+  const current = run => active === run;
   const detach = () => externalSignal?.removeEventListener("abort", externalAbort);
 
   function errorInfo(error) {
@@ -59,34 +65,15 @@ export function createLlmCall(request, { onStateChange } = {}) {
     catch { /* 订阅方异常不能改变请求结果，也不记录可能包含敏感信息的异常。 */ }
   }
 
-  function wait(run, delay) {
-    return new Promise((resolve, reject) => {
-      const signal = run.controller.signal;
-      const abort = () => {
-        clearTimeout(run.timer);
-        run.timer = null;
-        signal.removeEventListener("abort", abort);
-        reject(signal.reason);
-      };
-      signal.addEventListener("abort", abort, { once: true });
-      run.timer = setTimeout(() => {
-        run.timer = null;
-        signal.removeEventListener("abort", abort);
-        resolve();
-      }, delay);
-      if (signal.aborted) abort();
-    });
-  }
-
   async function execute(run) {
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       if (!current(run)) return;
       const delay = notBefore - Date.now();
       if (delay > MAX_WAIT_MS) throw lastError;
       if (delay > 0) {
         update({ status: "retry_wait", nextRetryAt: notBefore });
         if (!current(run)) return;
-        await wait(run, delay);
+        await waitForDelay(delay, run.controller.signal);
         if (!current(run)) return;
       }
       notBefore = 0;
@@ -101,14 +88,14 @@ export function createLlmCall(request, { onStateChange } = {}) {
         lastError = error;
         notBefore = retryTime(error?.retryAfter);
         state.error = errorInfo(error);
-        if (!canRetry(error) || attempt === MAX_ATTEMPTS) throw error;
+        if (!canRetry(error) || attempt === maxAttempts) throw error;
         notBefore = Math.max(notBefore, Date.now() + 2000 * 2 ** (attempt - 1) + Math.floor(Math.random() * 501));
       }
     }
   }
 
   function launch() {
-    const run = { generation: ++generation, controller: new AbortController(), timer: null };
+    const run = { controller: new AbortController() };
     run.promise = new Promise((resolve, reject) => Object.assign(run, { resolve, reject }));
     active = run;
     lastPromise = run.promise;
@@ -135,7 +122,6 @@ export function createLlmCall(request, { onStateChange } = {}) {
 
   function stop(status, reason) {
     if (["succeeded", "cancelled"].includes(state.status) || state.status === status) return getState();
-    generation += 1;
     const run = active;
     active = null;
     stopReason = reason;

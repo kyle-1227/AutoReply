@@ -3,17 +3,21 @@ import { TaskCoordinator, ordinaryPage, panelPath } from "./task-coordinator.js"
 import { FloatingController } from "./floating-controller.js";
 import { createQueue } from "./queue.js";
 import { CATALOG_PREFIX } from "./product-catalog.js";
+import { ExtensionUpdater } from "./update-client.js";
 
 const floating = new FloatingController(chrome);
 const configured = new Map();
 const uiJobs = new Map();
 const panelPorts = new Map();
+const panelMessages = new Set(["HELLO", "COMMAND", "SUSPEND", "PRODUCTS", "BUSY_STATE", "CREDENTIALS",
+  "UPDATE_CHECK", "UPDATE_START", "UPDATE_SETTINGS", "UPDATE_TEST"]);
 const coordinator = new TaskCoordinator({
   browser: chrome,
   onChange: snapshot => chrome.runtime.sendMessage({ type: "STATE_CHANGED", snapshot }).catch(() => {}),
   onWindowChange: windowId => syncWindow(windowId),
   runnerOptions: { wakeup: () => syncAlarm() },
 });
+const updater = new ExtensionUpdater({ browser: chrome, coordinator, ports: panelPorts });
 
 async function syncAlarm() {
   // Also expires completed records while every panel is closed.
@@ -34,7 +38,7 @@ async function configureTab(tab) {
     configured.set(tab.id, key);
   }
   const state = owner && coordinator.runner(owner.taskId).state;
-  const label = owner?.sourceAway ? "等待" : state ? ({ running: "运行", paused: "暂停", recovering: "恢复" }[state.status] || "") : "";
+  const label = coordinator.updating ? "更新" : updater.state?.phase === "completed" ? "已更新" : owner?.sourceAway ? "等待" : state ? ({ running: "运行", paused: "暂停", recovering: "恢复" }[state.status] || "") : "";
   await chrome.action.setBadgeText({ tabId: tab.id, text: label });
   await chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: state?.status === "running" ? "#386650" : "#8b651b" });
   await chrome.action.setTitle({ tabId: tab.id, title: owner
@@ -63,7 +67,9 @@ const ready = (async () => {
   await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
   await chrome.sidePanel.setOptions({ enabled: false });
   await chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
+  await updater.restoreGate();
   await coordinator.initialize();
+  void updater.poll().then(() => updater.schedule()).catch(() => {});
   const windows = await chrome.windows.getAll({ windowTypes: ["normal"] });
   await Promise.all(windows.map(window => syncWindow(window.id)));
   await syncAlarm();
@@ -138,19 +144,24 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     } catch (error) { respond({ ok: false, error: error.message }); }
     return true;
   }
-  const types = new Set(["HELLO", "COMMAND", "SUSPEND", "PRODUCTS", "BUSY_STATE", "CREDENTIALS", "COMPONENT_CHECK"]);
-  if (!types.has(message?.type)) return;
+  if (!panelMessages.has(message?.type)) return;
   const operation = async () => {
     await ready;
+    if (message.type.startsWith("UPDATE_")) {
+      panelIdentity(sender, message, true);
+      if (message.type === "UPDATE_CHECK") {
+        try { return { update: await updater.check() }; }
+        catch (error) { return { update: { available: false, message: error.message, componentVersion: updater.health?.componentVersion } }; }
+      }
+      if (message.type === "UPDATE_START") return { update: await updater.start(message.version) };
+      if (message.type === "UPDATE_SETTINGS") return { settings: await updater.request("update_settings", message.payload || {}) };
+      return { result: await updater.request("update_test") };
+    }
     if (message.type === "BUSY_STATE") {
       const url = new URL(sender.url || "about:blank");
       if (!url.href.startsWith(chrome.runtime.getURL("busy.html?"))) throw new Error("无法读取窗口状态。");
       const owner = coordinator.owner(Number(url.searchParams.get("windowId")));
       return { busy: owner ? coordinator.busySummary(owner) : null };
-    }
-    if (message.type === "COMPONENT_CHECK") {
-      panelIdentity(sender, message, true);
-      return { component: await coordinator.checkComponent() };
     }
     if (message.type === "HELLO") {
       const identity = panelIdentity(sender, message, true);
@@ -169,7 +180,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       return coordinator.products(context, message.action, message.payload || {});
     }
     if (message.command === "READ_REVIEWS") return { snapshot: await coordinator.read(context.id, context.taskId, context.bindingRevision) };
-    const commands = ["GET_STATE", "START", "PAUSE", "END", "ADD", "SAMPLES", "MANUAL", "ATTACHMENTS", "REMOVE", "CLEAR", "DRAFT", "PRODUCT_DRAFT", "IMPORT_LEGACY", "RESTORE_RECORD"];
+    const commands = ["GET_STATE", "START", "PAUSE", "END", "ADD", "SAMPLES", "MANUAL", "ATTACHMENTS", "REMOVE", "CLEAR", "RETRY_FAILED", "DRAFT", "PRODUCT_DRAFT", "IMPORT_LEGACY", "RESTORE_RECORD"];
     if (!commands.includes(message.command)) throw new Error("无法识别这个操作。");
     return { snapshot: await coordinator.command(context.id, context.taskId, message.command, message.payload, context.bindingRevision) };
   };
@@ -180,6 +191,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
 // A document's port disconnect provides the same lifecycle signal.
 chrome.runtime.onConnect.addListener(port => {
   if (!port.name.startsWith("panel:") || port.sender?.id !== chrome.runtime.id) return;
+  updater.bindPort(port);
   const contextId = port.name.slice(6);
   let disconnected = false;
   port.onDisconnect.addListener(() => {
@@ -198,7 +210,7 @@ chrome.runtime.onConnect.addListener(port => {
 });
 
 chrome.alarms.onAlarm.addListener(alarm => {
-  if (alarm.name === WAKE_ALARM) afterReady(() => coordinator.wake());
+  if (alarm.name === WAKE_ALARM) afterReady(async () => { await updater.poll(); updater.schedule(); if (!coordinator.updating) await coordinator.wake(); });
 });
 chrome.runtime.onStartup.addListener(() => ready.catch(console.error));
 chrome.storage.onChanged.addListener((changes, area) => {

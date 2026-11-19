@@ -1,9 +1,10 @@
-import { $, element } from "./ui.js";
+import { $, element, actionButton } from "./ui.js";
 import { renderMedia, mediaKey } from "./media.js";
 import { CATEGORY_SOURCE_NAMES, categoryName } from "./categories.js";
 import { pendingReviews } from "./review-queue.js";
+import { FAILURE_REASONS } from "./review-context.js";
 
-const reviewLabels = { pending: "待处理", generated: "已生成 · 待确认", replied: "模拟已回复", manual: "待人工" };
+const reviewLabels = { pending: "待处理", failed: "生成失败", generated: "已生成 · 待确认", replied: "模拟已回复", manual: "待人工" };
 const groupLabels = { ...reviewLabels, pending: "剩余评价队列" };
 
 let currentPreviewKey = "";
@@ -45,14 +46,6 @@ function renderCurrent(state, pauseRequested, filter) {
   }
 }
 
-function reviewAction(label, action, id) {
-  const button = element("button", "button text-button", label);
-  button.type = "button";
-  button.dataset.action = action;
-  button.dataset.id = id;
-  return button;
-}
-
 function productDescription(review) {
   const input = review.platformReview;
   return input ? [input.rating === null ? "评分未知" : `${input.rating} 星`, input.product.title, input.product.variant].filter(Boolean).join(" · ") : "";
@@ -64,7 +57,13 @@ function statusBadge(status) {
   return badge;
 }
 
-function reviewCard(review, number) {
+function routingDescription(routing) {
+  return [`首选模型：${routing.primaryModel}`, `回退模型：${routing.fallbackModel || "未调用"}`,
+    `视频输入：${routing.videoOmitted ? "回退时已省略，未识别" : "已提供给视频模型"}`,
+    ...routing.attempts.map(attempt => `${attempt.stage === "video" ? "视频模型" : "Haiku 回退"}：${attempt.outcome === "failed" ? FAILURE_REASONS[attempt.reasonCode] || "调用失败" : attempt.outcome === "manual" ? "转人工" : "生成成功"}${attempt.httpStatus ? `（HTTP ${attempt.httpStatus}）` : ""}${attempt.requestId ? `\n请求 ID：${attempt.requestId}` : ""}`)].join("\n");
+}
+
+function reviewCard(review, number, reading = false) {
   const card = element("article", "review-card");
   card.dataset.reviewId = review.id;
   if (review.platformReview) {
@@ -86,11 +85,16 @@ function reviewCard(review, number) {
   }
   const actions = element("div", "card-actions");
   if (review.attachments.length) {
-    actions.append(reviewAction(`${review.attachments.length} 个附件 · 查看素材`, "media", review.id));
+    actions.append(actionButton(`${review.attachments.length} 个附件 · 查看素材`, "media", review.id));
   }
-  if (review.status === "pending") {
+  if (["pending", "failed"].includes(review.status)) {
     const buttons = element("div");
-    buttons.append(reviewAction("转人工", "manual", review.id), reviewAction("移除", "remove", review.id));
+    if (review.status === "failed") {
+      const retry = actionButton("重试", "retry", review.id);
+      retry.disabled = reading;
+      buttons.append(retry);
+    }
+    buttons.append(actionButton("转人工", "manual", review.id), actionButton("移除", "remove", review.id));
     actions.append(buttons);
   }
   if (actions.childElementCount) card.append(actions);
@@ -103,7 +107,13 @@ function reviewCard(review, number) {
     const record = review.generationRecord, provenance = element("details", "review-provenance");
     provenance.append(element("summary", "", record.product ? "商品资料回复" : "通用回复"), element("p", "", `模型：${record.model}\n规则版本：${record.promptVersion || "旧版"}\n商品资料：${record.product ? `${record.product.name || record.product.id} / ${record.product.version}` : "无，通用回复"}`));
     if (Object.hasOwn(record, "categoryId")) provenance.append(element("p", "", `类目规则：${categoryName(record.categoryId)}\n类目来源：${CATEGORY_SOURCE_NAMES[record.categorySource] || "未记录"}`));
+    if (record.routing) provenance.append(element("p", "", routingDescription(record.routing)));
     card.append(provenance);
+  }
+  if (review.failureRecord) {
+    const failure = element("details", "review-provenance failure-details");
+    failure.append(element("summary", "", "失败详情"), element("p", "", routingDescription(review.failureRecord.routing)));
+    card.append(failure);
   }
   if (review.status === "manual") {
     const reason = element("div", "manual-reason");
@@ -113,7 +123,7 @@ function reviewCard(review, number) {
   return card;
 }
 
-function queueItem(review, number, open) {
+function queueItem(review, number, open, reading) {
   const item = element("details", "queue-item");
   item.dataset.reviewId = review.id;
   item.dataset.status = review.status;
@@ -141,23 +151,25 @@ function queueItem(review, number, open) {
     summary.append(count);
   }
   summary.append(chevron);
-  item.append(summary, reviewCard(review));
+  item.append(summary);
+  const showDetails = () => item.append(reviewCard(review, undefined, reading));
+  if (open) showDetails();
+  else item.addEventListener("toggle", showDetails, { once: true });
   return item;
 }
 
 function renderLists(state, filter) {
   const { reviews } = state;
-  const key = JSON.stringify([filter, reviews, state.queueCursor]);
+  const key = JSON.stringify([filter, reviews, state.queueCursor, state.reading]);
   if (key === renderedListKey) return; // Keep focus and disclosure state on unchanged snapshots.
   renderedListKey = key;
   const expanded = new Set([...$("review-list").querySelectorAll("details[data-review-id][open]")].map(item => item.dataset.reviewId));
   const focused = document.activeElement;
   const focusedReview = focused?.closest("details[data-review-id]")?.dataset.reviewId;
-  const groups = { pending: [], generated: [], replied: [], manual: [] }, manual = [];
-  groups.pending = pendingReviews(state).map(review => queueItem(review, undefined, expanded.has(review.id)));
+  const groups = { pending: [], failed: [], generated: [], replied: [], manual: [] };
+  if (filter === "all" || filter === "pending") groups.pending = pendingReviews(state).map(review => ({ review }));
   reviews.forEach((review, index) => {
-    if (review.status !== "pending") groups[review.status]?.push(queueItem(review, index + 1, expanded.has(review.id)));
-    if (review.status === "manual") manual.push(reviewCard(review, index + 1));
+    if (review.status !== "pending") groups[review.status]?.push({ review, number: index + 1 });
   });
   const sections = [];
   for (const [status, label] of Object.entries(groupLabels)) {
@@ -170,12 +182,21 @@ function renderLists(state, filter) {
     heading.id = `group-${status}`;
     heading.append(element("span", "group-count", items.length));
     section.setAttribute("aria-labelledby", heading.id);
-    section.append(heading, ...(items.length ? items : [element("p", "queue-empty", `暂无${status === "pending" ? "待处理" : label}评价`)]));
+    const header = element("div", "group-header");
+    header.append(heading);
+    if (status === "failed" && items.length) {
+      const retry = actionButton("重试全部失败", "retry-all");
+      retry.disabled = Boolean(state.reading);
+      header.append(retry);
+    }
+    section.append(header);
+    if (items.length) section.append(...items.map(({ review, number }) => queueItem(review, number, expanded.has(review.id), state.reading)));
+    else section.append(element("p", "queue-empty", `暂无${status === "pending" ? "待处理" : label}评价`));
     sections.push(section);
   }
   $("review-list").replaceChildren(...sections);
-  $("manual-list").replaceChildren(...manual);
-  $("manual-empty").hidden = manual.length > 0;
+  $("manual-list").replaceChildren(...groups.manual.map(({ review, number }) => reviewCard(review, number)));
+  $("manual-empty").hidden = groups.manual.length > 0;
   if (focusedReview) {
     const row = [...$("review-list").querySelectorAll("details[data-review-id]")].find(item => item.dataset.reviewId === focusedReview);
     const target = focused.dataset.action ? [...(row?.querySelectorAll("button") || [])].find(button => button.dataset.action === focused.dataset.action) : row?.firstElementChild;

@@ -74,6 +74,8 @@ main { padding-bottom: 108px; }
 .stat-value { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.3; }
 #count-pending { color: var(--blue); }
 #count-manual { color: var(--amber); }
+#count-failed { color: var(--danger); }
+.stats:has(#failed-stat:not([hidden])) .processed-stat { flex-basis: 100%; border-left: 0; padding-left: 0; }
 .progress-row { display: flex; align-items: center; gap: 10px; margin-top: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
 #progress-value { color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .progress { flex: 1; height: 5px; overflow: hidden; border-radius: 3px; background: #e7ebf1; }
@@ -108,9 +110,12 @@ main { padding-bottom: 108px; }
 .queue-group { padding-top: 18px; margin-top: 22px; border-top: 1px solid var(--line); }
 .queue-group:first-child { margin-top: 0; }
 .group-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+.group-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; }
+.group-header .text-button { padding: 4px 0; }
 .group-count { color: var(--muted); font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .queue-group[data-review-group="replied"] .group-heading { color: var(--success); }
 .queue-group[data-review-group="manual"] .group-heading { color: var(--amber); }
+.queue-group[data-review-group="failed"] .group-heading, .failure-details { color: var(--danger); }
 .queue-empty { padding: 16px 0 4px; color: var(--muted); }
 .queue-item { border-bottom: 1px solid var(--line); }
 .review-summary { display: flex; align-items: center; gap: 14px; padding: 16px 0; cursor: pointer; list-style: none; }
@@ -133,6 +138,7 @@ main { padding-bottom: 108px; }
 .badge { display: inline-flex; align-items: center; flex-shrink: 0; padding: 3px 7px; border-radius: 4px; background: var(--surface); color: var(--muted); font-size: 14px; font-weight: 500; line-height: 1.5; }
 .badge[data-status="replied"] { color: var(--success); background: #edf6ef; }
 .badge[data-status="manual"] { color: var(--amber); background: #fff6e5; }
+.badge[data-status="failed"] { color: var(--danger); background: #fff1ef; }
 .card-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; }
 .card-actions > div { display: flex; gap: 16px; }
 .card-actions .text-button { min-height: 32px; padding: 4px 0; }
@@ -216,6 +222,10 @@ dialog h2 { font-size: 18px; }
 .version-details > div { display: flex; justify-content: space-between; gap: 16px; }
 .version-details dt { color: var(--muted); flex-shrink: 0; }
 .version-details dd { margin: 0; text-align: right; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+#update-progress { width: 100%; margin-top: 12px; accent-color: var(--blue); }
+#update-connection { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+#update-connection summary { cursor: pointer; }
+#update-settings input { width: 100%; margin: 6px 0 14px; }
 dialog h2 + .field-label { margin-top: 22px; }
 dialog .media-grid { margin-bottom: 18px; }
 dialog .media-card img, dialog .media-card video { height: 150px; }

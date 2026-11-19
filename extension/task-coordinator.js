@@ -2,7 +2,7 @@ import { BINDINGS_KEY, RETENTION_MS, counts, isActive, holdsWindow } from "./mod
 import { TaskRunner } from "./task-runner.js";
 import { WorkspaceStore, createRecord } from "./workspace-store.js";
 import { createQueue } from "./queue.js";
-import { readReviews, isReviewPage } from "./review-reader.js";
+import { readReviews, readShopSource, isReviewPage } from "./review-reader.js";
 import { generateReply, NativeClient } from "./native-client.js";
 import { ProductCatalog, catalogKey, productDocument } from "./product-catalog.js";
 import { CostStore } from "./cost-store.js";
@@ -31,7 +31,9 @@ export class TaskCoordinator {
         void this.componentDisconnected(error).catch(console.error);
       },
       onCosts: event => this.costs.receive(event),
+      onUpdate: message => this.updater?.event(message),
       onHealth: async health => {
+        await this.updater?.register(health);
         if (health.costTrackingVersion !== COST_TRACKING_VERSION) return;
         await this.costs.activate(health.costSessionId);
         const pending = this.costs.unresolved();
@@ -53,8 +55,8 @@ export class TaskCoordinator {
       const record = this.records.get(context.taskId);
       if (!tab || tab.windowId !== context.windowId) {
         if (context.occupied && record) {
-          record.state.status = "ended";
-          record.state.endReason = "来源页面已关闭或移出原窗口，任务已结束。";
+          record.state.status = this.updating ? "paused" : "ended";
+          record.state.endReason = this.updating ? "" : "来源页面已关闭或移出原窗口，任务已结束。";
         }
         continue;
       }
@@ -89,8 +91,7 @@ export class TaskCoordinator {
           record.updatedAt = Date.now();
           record.expiresAt = await this.store.saveRecord(record);
         },
-        publish: state => {
-          this.records.get(taskId).state = state;
+        onChange: () => {
           if (!this.restoring) this.enqueue(() => this.changed(taskId)).catch(console.error);
         },
         canProcess: () => this.checkSource(taskId),
@@ -122,11 +123,12 @@ export class TaskCoordinator {
     return this.runners.get(taskId);
   }
 
-  contextForTask(taskId) { return [...this.contexts.values()].find(item => item.taskId === taskId); }
-  contextForTab(tabId) { return [...this.contexts.values()].find(item => item.tabId === tabId); }
-  owner(windowId) { return [...this.contexts.values()].find(item => item.windowId === windowId && item.occupied); }
+  contextForTask(taskId) { return this.contexts.values().find(item => item.taskId === taskId); }
+  contextForTab(tabId) { return this.contexts.values().find(item => item.tabId === tabId); }
+  catalogSource(context) { return this.runner(context.taskId).state.reviewSource || context.catalogSource || null; }
+  owner(windowId) { return this.contexts.values().find(item => item.windowId === windowId && item.occupied); }
   floatingContext(windowId) {
-    return this.owner(windowId) || [...this.contexts.values()].find(item => item.windowId === windowId && item.showFloating);
+    return this.owner(windowId) || this.contexts.values().find(item => item.windowId === windowId && item.showFloating);
   }
 
   setPanelVisibility(context, open) {
@@ -147,7 +149,10 @@ export class TaskCoordinator {
     context.bindingRevision ??= 0;
     context.observedUrl ??= context.url;
     const ready = ordinaryPage(tab) && tab.status === "complete" && !tab.discarded && !tab.frozen;
-    if (context.observedUrl !== tab.url || (context.pageReady && !ready)) context.bindingRevision++;
+    if (context.observedUrl !== tab.url || (context.pageReady && !ready)) {
+      context.bindingRevision++;
+      delete context.catalogSource;
+    }
     context.observedUrl = tab.url;
     context.pageReady = ready;
     context.sourceAway = Boolean(context.occupied && (tab.url !== context.url || (context.sourceAway && !ready)));
@@ -228,15 +233,17 @@ export class TaskCoordinator {
     if (!context) throw new Error("这个面板已失效，请在目标页面点击插件图标重新打开。");
     const record = this.records.get(context.taskId);
     const owner = this.owner(context.windowId);
+    const runner = this.runner(context.taskId);
+    const source = this.catalogSource(context);
     return { contextId, taskId: context.taskId, bindingRevision: context.bindingRevision,
-      pageReady: context.pageReady && context.observedUrl === context.url && !context.sourceAway,
-      sourceAway: Boolean(context.sourceAway), state: this.runner(context.taskId).snapshot(),
+      pageReady: context.pageReady && context.observedUrl === context.url && !context.sourceAway, updating: Boolean(this.updating),
+      sourceAway: Boolean(context.sourceAway), state: runner.snapshot(),
       source: { tabId: context.tabId, windowId: context.windowId, url: context.url, title: context.title },
       bound: context.occupied, valid: true, busy: owner && owner.id !== contextId ? this.busySummary(owner) : null,
       draft: structuredClone(record.draft), productDraft: structuredClone(record.productDraft),
-      catalogLocked: record.state.reviewSource ? this.catalogLocked(record.state.reviewSource) : true,
+      catalogLocked: source ? this.catalogLocked(source) : null,
       expiresAt: record.expiresAt, history: this.history(), legacyAvailable: this.store.hasLegacy(), component: { ...this.component },
-      costs: this.costs.snapshot(context.taskId, this.runner(context.taskId).state.reviewSource, this.runner(context.taskId).state.costEpoch || 0) };
+      costs: this.costs.snapshot(context.taskId, runner.state.reviewSource, runner.state.costEpoch || 0) };
   }
 
   require(contextId, taskId, bindingRevision, draft = false) {
@@ -253,6 +260,7 @@ export class TaskCoordinator {
   }
 
   command(contextId, taskId, name, payload = {}, bindingRevision) {
+    if (this.updating && !["GET_STATE", "PAUSE", "DRAFT", "PRODUCT_DRAFT"].includes(name)) throw new Error("正在更新，任务保持暂停，请稍后操作。");
     const draft = name === "DRAFT" || name === "PRODUCT_DRAFT";
     const context = this.require(contextId, taskId, bindingRevision, draft);
     if (["PAUSE", "END"].includes(name)) this.runner(taskId).cancelTick();
@@ -263,9 +271,22 @@ export class TaskCoordinator {
         case "START":
           await this.start(context);
           break;
+        case "RETRY_FAILED": {
+          runner.retryReviews(payload);
+          if (!isActive(runner.state)) await this.start(context, payload);
+          else {
+            const generation = runner.generation;
+            if (!await this.checkReadSource(taskId)) throw new Error("请在原店铺评价页加载完成后重试。");
+            this.require(contextId, taskId, bindingRevision);
+            if (generation !== runner.generation) throw new Error("任务已变化，请重新重试。");
+            await runner.command(name, payload);
+          }
+          break;
+        }
         case "DRAFT":
         case "PRODUCT_DRAFT": {
-          if (name === "PRODUCT_DRAFT" && runner.state.reviewSource && this.catalogLocked(runner.state.reviewSource)) {
+          const source = runner.state.reviewSource || (context.taskId === taskId && context.catalogSource);
+          if (name === "PRODUCT_DRAFT" && source && this.catalogLocked(source)) {
             throw new Error("当前店铺任务正在运行，请先暂停后修改资料。");
           }
           const record = this.records.get(taskId);
@@ -288,7 +309,7 @@ export class TaskCoordinator {
           await this.restoreRecord(context, payload.id);
           break;
         case "GET_STATE":
-          break;
+          return this.snapshot(contextId);
         default:
           if (name === "END" && !context.occupied) throw new Error("当前没有占用窗口的任务。");
           await runner.command(name, payload);
@@ -302,6 +323,7 @@ export class TaskCoordinator {
   }
 
   async read(contextId, taskId, bindingRevision) {
+    if (this.updating) throw new Error("正在更新，暂时不能读取评价。");
     this.require(contextId, taskId, bindingRevision);
     if (!await this.checkReadSource(taskId)) throw new Error("请在已加载完成的店铺评论页读取评价。");
     this.require(contextId, taskId, bindingRevision);
@@ -321,7 +343,7 @@ export class TaskCoordinator {
       tab.status === "complete" && !tab.discarded && !tab.frozen);
   }
 
-  async start(context) {
+  async start(context, retryPayload) {
     const runner = this.runner(context.taskId);
     const expected = runner.generation;
     const owner = this.owner(context.windowId);
@@ -352,7 +374,7 @@ export class TaskCoordinator {
         if (!wasOccupied) await this.release(context);
         return;
       }
-      await runner.command("START");
+      await runner.command(retryPayload ? "RETRY_FAILED" : "START", retryPayload);
       if (tab.status === "loading") await runner.command("RECONNECTING");
     } catch (error) {
       runner.cancelTick();
@@ -397,8 +419,8 @@ export class TaskCoordinator {
   async changed(taskId) {
     const context = this.contextForTask(taskId);
     if (!context) return;
-    const state = this.runner(taskId).state;
-    if (!isActive(state)) delete this.runner(taskId).productSnapshot;
+    const runner = this.runner(taskId), state = runner.state;
+    if (!isActive(state)) delete runner.productSnapshot;
     if (context.occupied && !holdsWindow(state)) await this.release(context, state.status === "completed");
     this.broadcastWindow(context.windowId, state.reviewSource);
     await this.onWindowChange(context.windowId);
@@ -406,7 +428,7 @@ export class TaskCoordinator {
 
   broadcastWindow(windowId, source = null) {
     for (const context of this.contexts.values()) {
-      const other = this.runner(context.taskId).state.reviewSource;
+      const other = this.catalogSource(context);
       if (context.windowId === windowId || (source && other && catalogKey(source) === catalogKey(other))) this.onChange(this.snapshot(context.id));
     }
   }
@@ -436,13 +458,12 @@ export class TaskCoordinator {
       const latest = tab && await this.browser.tabs.get(tabId).catch(() => null);
       if (!latest || latest.windowId !== context.windowId) {
         await this.detach(context, "来源页面已关闭或移出原窗口，任务已结束。");
-      } else if (!context.occupied) {
-        if (invalid || loading) await this.runner(context.taskId).commit();
-        await this.selectPage(context, latest);
-        await this.saveBindings();
-        this.onChange(this.snapshot(context.id));
       } else {
-        await this.syncBoundPage(context, latest, { departed, loading });
+        if (context.occupied) await this.syncBoundPage(context, latest, { departed, loading });
+        else {
+          if (invalid || loading) await this.runner(context.taskId).commit();
+          await this.selectPage(context, latest);
+        }
         await this.saveBindings();
         this.onChange(this.snapshot(context.id));
       }
@@ -453,7 +474,7 @@ export class TaskCoordinator {
   async detach(context, reason) {
     const runner = this.runner(context.taskId);
     runner.cancelTick();
-    if (context.occupied) await runner.command("END", { reason });
+    if (context.occupied) await runner.command(this.updating ? "PAUSE" : "END", { reason: this.updating ? "更新引起的重启，任务已保存。" : reason });
     const snapshot = this.snapshot(context.id);
     this.contexts.delete(context.id);
     await this.release(context);
@@ -485,11 +506,14 @@ export class TaskCoordinator {
   }
 
   catalogLocked(source) {
-    return [...this.runners.values()].some(runner => isActive(runner.state) && runner.state.reviewSource &&
+    return this.runners.values().some(runner => isActive(runner.state) && runner.state.reviewSource &&
       catalogKey(runner.state.reviewSource) === catalogKey(source));
   }
 
   async checkComponent() {
+    if (this.updating && ["installing", "restarting"].includes(this.updater?.state?.phase)) {
+      return { ...this.component, status: "updating", message: "正在更新组件，请等待安装完成。" };
+    }
     try {
       const health = await this.native.request("health", {});
       this.component = { status: health.hasModelKey ? "ready" : "missing-key", message: health.categoryRulesVersion !== CATEGORY_RULES_VERSION
@@ -503,7 +527,7 @@ export class TaskCoordinator {
   saveKey(context, payload) {
     return this.enqueue(async () => {
       this.require(context.id, context.taskId, context.bindingRevision);
-      if ([...this.runners.values()].some(runner => runner.state.mode === "llm" && isActive(runner.state))) {
+      if (this.runners.values().some(runner => runner.state.mode === "llm" && isActive(runner.state))) {
         throw new Error("请先暂停本浏览器环境中的生成任务，再更新 API Key。");
       }
       await this.native.request("credentials", payload);
@@ -527,13 +551,20 @@ export class TaskCoordinator {
   }
 
   products(context, action, payload = {}) {
+    if (this.updating && !["LIST", "EXPORT"].includes(action)) throw new Error("正在更新，资料暂时只读。");
     return this.enqueue(async () => {
+      const current = this.require(context.id, context.taskId, context.bindingRevision);
+      const previous = this.catalogSource(current);
+      const source = this.runner(context.taskId).state.reviewSource || await readShopSource(context, { browser: this.browser });
       this.require(context.id, context.taskId, context.bindingRevision);
-      const source = this.runner(context.taskId).state.reviewSource;
-      if (!source) {
-        if (action !== "LIST") throw new Error("请先读取当前店铺评价。");
-        return { products: [], categoryIds: [], revision: 0, locked: true, shop: null, message: "先读取店铺评价，再管理该店铺资料。" };
+      if (previous && catalogKey(previous) !== catalogKey(source)) {
+        if (action !== "LIST") throw new Error("当前店铺已变化，请刷新资料后重新操作。");
+        const record = this.records.get(context.taskId);
+        record.productDraft = {};
+        await this.store.saveRecord(record);
       }
+      current.catalogSource = source;
+      await this.saveBindings();
       const locked = this.catalogLocked(source);
       if (action !== "LIST" && locked) throw new Error("当前店铺任务正在运行，请先暂停后修改资料。");
       if (action === "EXPORT") return { backup: await this.catalog.backup(source) };
@@ -541,6 +572,7 @@ export class TaskCoordinator {
       if (action === "LIST") catalog = await this.catalog.read(source);
       else if (action === "IMPORT_BACKUP") catalog = await this.catalog.restore(source, payload);
       else catalog = await this.catalog.edit(source, action, payload);
+      this.broadcastWindow(context.windowId, source);
       return { ...catalog, locked };
     });
   }

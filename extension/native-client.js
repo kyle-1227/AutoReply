@@ -1,6 +1,8 @@
 import { findProduct } from "./product-catalog.js";
 import { NATIVE_HOST, APP_VERSION, PROTOCOL_VERSION, COST_TRACKING_VERSION, MAX_MESSAGE_BYTES } from "./protocol.js";
-import { createQueue } from "./queue.js";
+import { createQueue, waitForDelay } from "./queue.js";
+import { readFailureRecord } from "./review-context.js";
+import { UPDATE_FIELDS, UPDATE_VERSION } from "./update-protocol.js";
 
 const componentError = message => Object.assign(new Error(message), { code: "COMPONENT_UNAVAILABLE" });
 const missingComponent = () => componentError("本机组件未安装或无法启动，请运行 AutoReply 安装程序。");
@@ -17,8 +19,8 @@ function waitFor(promise, signal) {
 
 // One Native Messaging connection per browser environment, shared by its tasks.
 export class NativeClient {
-  constructor(runtime, { onDisconnect = () => {}, onHealth = async () => {}, onCosts = async () => {}, timeoutMs = 8000 } = {}) {
-    Object.assign(this, { runtime, onDisconnect, onHealth, onCosts, timeoutMs });
+  constructor(runtime, { onDisconnect = () => {}, onHealth = async () => {}, onCosts = async () => {}, onUpdate = async () => {}, timeoutMs = 8000 } = {}) {
+    Object.assign(this, { runtime, onDisconnect, onHealth, onCosts, onUpdate, timeoutMs });
     this.port = null;
     this.healthPromise = null;
     this.pending = new Map();
@@ -37,6 +39,9 @@ export class NativeClient {
     this.costError = null;
     port.onMessage.addListener(message => {
       if (this.port !== port) return;
+      if (["UPDATE_PREPARE", "UPDATE_DETACH"].includes(message?.type)) {
+        void Promise.resolve(this.onUpdate(message)).catch(() => {}); return;
+      }
       if (message?.type === "COST_EVENT") {
         void this.costMessages(async () => {
           if (this.port !== port || message.sessionId !== this.costSessionId) return;
@@ -77,7 +82,7 @@ export class NativeClient {
         this.pending.delete(requestId); callback(value);
       };
       const abort = () => request.reject(signal.reason);
-      const timeout = command === "credentials" ? this.timeoutMs * 3 : this.timeoutMs;
+      const timeout = command === "credentials" || ["update_check", "update_start", "update_test"].includes(command) ? this.timeoutMs * 4 : this.timeoutMs;
       const timer = setTimeout(() => request.reject(componentError("本机组件响应超时，请稍后继续。")), timeout);
       const request = { resolve: finish(resolve), reject: finish(reject) };
       this.pending.set(requestId, request);
@@ -109,17 +114,20 @@ export class NativeClient {
     return this.rawRequest(command, payload, signal);
   }
 
-  disconnect() { this.port?.disconnect(); }
-}
+  async updateRequest(command, payload = {}, onHealth) {
+    if (command !== "health" && !Object.hasOwn(UPDATE_FIELDS, command)) throw componentError("不支持此更新操作。");
+    this.connect();
+    const port = this.port;
+    const health = await this.rawRequest("health", {});
+    if (health?.protocolVersion !== PROTOCOL_VERSION) throw componentError("本机通信协议不兼容，请手动安装配套组件。");
+    if (onHealth) await onHealth(health);
+    if (command === "health") return health;
+    if (health.updateProtocolVersion !== UPDATE_VERSION) throw componentError("请先手动安装一次支持一键更新的配套组件。");
+    if (this.port !== port) throw componentError("本机组件连接已更换，请重新检查更新。");
+    return this.rawRequest(command, payload);
+  }
 
-function delay(signal) {
-  return new Promise((resolve, reject) => {
-    const finish = () => { signal?.removeEventListener("abort", abort); resolve(); };
-    const timer = setTimeout(finish, 700);
-    const abort = () => { clearTimeout(timer); signal.removeEventListener("abort", abort); reject(signal.reason); };
-    signal?.addEventListener("abort", abort, { once: true });
-    if (signal?.aborted) abort();
-  });
+  disconnect() { this.port?.disconnect(); }
 }
 
 export async function generateReply(review, { client, taskId, generation, products, signal, onStateChange }) {
@@ -130,13 +138,15 @@ export async function generateReply(review, { client, taskId, generation, produc
   let operation = await client.request("generate", { taskId, generation, review: input, product }, signal);
   while (operation.status === "pending") {
     if (operation.callState) onStateChange?.(operation.callState);
-    await delay(signal);
+    await waitForDelay(700, signal);
     operation = await client.request("operation", { taskId, operationId: operation.id }, signal);
   }
   signal?.throwIfAborted();
   if (operation.status === "succeeded") return operation.data;
   if (operation.data?.retryAt) onStateChange?.({ status: "failed", nextRetryAt: operation.data.retryAt });
   if (operation.data?.code === "COST_STORAGE_FAILED") client.disconnect?.();
+  const failureRecord = operation.data?.code === "VIDEO_FALLBACK_FAILED" ? readFailureRecord(operation.data.failureRecord) : null;
+  if (operation.data?.code === "VIDEO_FALLBACK_FAILED" && !failureRecord) throw componentError("本机组件返回了无效的失败记录，请更新组件后重试。");
   throw Object.assign(new Error(operation.data?.message || "生成已中断，请检查后继续。"),
-    { code: operation.data?.code || "GENERATION_FAILED", status: operation.data?.status });
+    { code: operation.data?.code || "GENERATION_FAILED", status: operation.data?.status, ...(failureRecord ? { failureRecord } : {}) });
 }

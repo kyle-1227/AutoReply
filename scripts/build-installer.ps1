@@ -33,7 +33,7 @@ using System.Reflection;
 [assembly: AssemblyFileVersion("$($metadata.version).0")]
 [assembly: AssemblyInformationalVersion("$($metadata.version)")]
 "@ | Set-Content -LiteralPath $assemblyInfo -Encoding UTF8
-& $compiler /nologo /target:winexe /reference:System.Security.dll "/out:$(Join-Path $payload 'AutoReplyHost.exe')" (Join-Path $projectRoot 'installer\NativeHost.cs') $assemblyInfo
+& $compiler /nologo /target:winexe /reference:System.Security.dll /reference:System.Management.dll "/out:$(Join-Path $payload 'AutoReplyHost.exe')" (Join-Path $projectRoot 'installer\NativeHost.cs') $assemblyInfo
 if ($LASTEXITCODE -ne 0) { throw 'Native launcher compilation failed.' }
 
 $publicKey = [Convert]::FromBase64String((Get-Content -LiteralPath (Join-Path $payload 'extension\manifest.json') -Encoding UTF8 -Raw | ConvertFrom-Json).key)

@@ -7,7 +7,8 @@ import { isReviewPage } from "./review-reader.js";
 import { renderReviews } from "./review-list.js";
 import { formatCost } from "./cost-store.js";
 import { shopKey } from "./product-catalog.js";
-import { APP_VERSION, COST_TRACKING_VERSION } from "./protocol.js";
+import { COST_TRACKING_VERSION } from "./protocol.js";
+import { initializeUpdates } from "./updates.js";
 
 const tabs = ["tasks", "add", "manual"];
 const productTabs = ["products", "categories"];
@@ -78,11 +79,13 @@ function applySnapshot(next, restoreDraft = false) {
     const changedTask = context?.taskId && context.taskId !== next.taskId;
     const changedShop = JSON.stringify(state?.reviewSource) !== JSON.stringify(next.state.reviewSource);
     if (!changedTask && context?.costs && (next.costs?.revision < context.costs.revision || (next.costs?.epoch || 0) < (state?.costEpoch || 0))) next = { ...next, costs: context.costs };
-    if (context && !changedTask && next.costs && next.costs.revision >= (context.costs?.revision ?? -1)) {
-      context.costs = next.costs;
-      renderCosts();
+    if (!changedTask && state && next.state.revision < state.revision) {
+      if (context && next.costs && next.costs !== context.costs && next.costs.revision >= (context.costs?.revision ?? -1)) {
+        context.costs = next.costs;
+        renderCosts();
+      }
+      return;
     }
-    if (!changedTask && state && next.state.revision < state.revision) return;
     if (changedTask) pageMedia.set(context.taskId, { draftAttachments, attachments: state.reviews.flatMap(item => item.attachments), expiresAt: context.expiresAt });
     context = next;
     state = next.state;
@@ -124,12 +127,11 @@ function applySnapshot(next, restoreDraft = false) {
 function captureContext() {
   if (!context?.contextId) throw new Error("面板正在准备，请稍后重试。");
   const identity = { contextId: context.contextId, taskId: context.taskId, bindingRevision: context.bindingRevision };
+  const isCurrent = () => context?.contextId === identity.contextId && context.taskId === identity.taskId && latestBindingRevision === identity.bindingRevision;
   const check = () => {
-    if (context?.contextId !== identity.contextId || context.taskId !== identity.taskId || latestBindingRevision !== identity.bindingRevision) {
-      throw Object.assign(new Error("页面已切换，已忽略原页面的操作。"), { stalePage: true });
-    }
+    if (!isCurrent()) throw Object.assign(new Error("页面已切换，已忽略原页面的操作。"), { stalePage: true });
   };
-  return { check, request: async (type, fields = {}) => {
+  return { isCurrent, check, request: async (type, fields = {}) => {
     const draft = type === "COMMAND" && ["DRAFT", "PRODUCT_DRAFT"].includes(fields.command);
     try {
       if (!draft) check();
@@ -168,14 +170,14 @@ function switchTab(name, focus = false) {
 
 function renderAccess() {
   const blocked = Boolean(context?.busy || context?.valid === false);
-  document.querySelectorAll("[data-initializing]").forEach(node => { node.inert = !initialized || switchingPage; });
+  const unavailable = !initialized || switchingPage || context?.updating;
+  const reviewPage = isReviewPage(context?.source?.url);
+  document.querySelectorAll("[data-initializing]").forEach(node => { node.inert = unavailable; });
   $("context-notice").hidden = !blocked;
   $("source-card").hidden = blocked || !context?.source;
   $("source-away").hidden = blocked || !context?.sourceAway;
   $("return-rating").disabled = !initialized || switchingPage;
-  $("open-products").disabled = blocked || !initialized || switchingPage;
-  $("suspend-button").disabled = blocked || !initialized || switchingPage;
-  $("open-account").disabled = blocked || !initialized || switchingPage;
+  for (const id of ["open-products", "suspend-button", "open-account"]) $(id).disabled = blocked || unavailable;
   $("save-account").disabled = savingKey || !context?.component?.canSaveKey || (state?.mode === "llm" && isActive(state));
   $("save-account").textContent = savingKey ? "正在保存…" : "保存 API Key";
   $("cancel-account").disabled = savingKey;
@@ -185,9 +187,9 @@ function renderAccess() {
       : context.component.status === "ready" ? "当前电脑已配置 API Key。填写新 Key 可替换。" : "当前电脑尚未配置 API Key。"
     : context?.component?.status === "ready" || context?.component?.status === "missing-key"
       ? "请先更新本机组件，以支持在插件内保存 API Key。" : context?.component?.message || "正在检查本机组件…";
-  $("read-reviews").disabled = blocked || !initialized || switchingPage || !context?.pageReady || readBusy || state?.reading || isActive(state) || !isReviewPage(context?.source?.url);
+  $("read-reviews").disabled = blocked || unavailable || !context?.pageReady || readBusy || state?.reading || isActive(state) || !reviewPage;
   $("read-reviews").textContent = state?.reading ? "正在读取…" : "读取未回复";
-  $("read-reviews").title = isReviewPage(context?.source?.url) ? "读取全部评分的未回复评价，不提交店铺回复" : "请在 TikTok Shop 马来西亚站或新加坡站商品评分页打开插件";
+  $("read-reviews").title = reviewPage ? "读取全部评分的未回复评价，不提交店铺回复" : "请在 TikTok Shop 马来西亚站或新加坡站商品评分页打开插件";
   document.querySelector(".tabs").hidden = blocked || productTabs.includes(activeTab);
   for (const name of [...tabs, ...productTabs]) $(`view-${name}`).hidden = blocked || name !== activeTab;
   // Keep Pause available while processing; idle forms have their own actions.
@@ -220,7 +222,7 @@ function renderRecovery() {
   $("recovery-controls").hidden = context.bound || !history.length;
   const selected = $("saved-records").value;
   $("saved-records").replaceChildren(...history.map(record => {
-    const option = element("option", "", `${record.source.title || record.source.url} · ${runLabels[record.status]} · ${record.replied + (record.generated || 0)}/${record.total}`);
+    const option = element("option", "", `${record.source.title || record.source.url} · ${record.failed ? "有失败" : runLabels[record.status]} · ${record.replied + (record.generated || 0)}/${record.total}${record.failed ? ` · 失败 ${record.failed}` : ""}`);
     option.value = record.id;
     return option;
   }));
@@ -243,6 +245,24 @@ function renderCosts() {
   }
 }
 
+function taskLabels(running, failed, warning) {
+  if (context.sourceAway) return ["等待返回", "等待返回", "等待返回原评价页"];
+  if (pauseRequested) return ["正在暂停", "正在暂停…", "正在暂停"];
+  if (running) {
+    let status = runLabels[state.status];
+    if (state.reading) status = "读取中";
+    else if (state.callState?.status === "retry_wait") status = "重试等待中";
+    else if (state.status === "running" && state.callState?.stage === "haiku") status = "Haiku 回退中";
+    return [status, "立即暂停", "立即暂停当前处理"];
+  }
+  if (state.status === "completed") {
+    if (failed) return ["本轮结束 · 有失败", "本轮结束 · 有失败"];
+    if (warning) return ["已读完成 · 数量待核对", "已读评价已完成"];
+    return [runLabels.completed, "本轮已完成"];
+  }
+  return [runLabels[state.status], `${state.status === "paused" ? "继续" : "开始"}${state.mode === "llm" ? "生成" : "演示"}`];
+}
+
 function render() {
   renderCosts();
   if (!state) return;
@@ -250,6 +270,7 @@ function render() {
   const warning = readWarning(state);
   $("component-status").textContent = context?.component?.message || "";
   const running = isActive(state) || state.reading;
+  const [status, action, accessibleAction = action] = taskLabels(running, totals.failed, warning);
   const displayStatus = pauseRequested ? "paused" : state.status;
   $("count-pending").textContent = totals.waiting;
   $("count-replied").textContent = totals.generated + totals.replied;
@@ -258,30 +279,34 @@ function render() {
     ? `已读取 ${state.pagination.readCount} 条 · 平台显示 ${state.pagination.total} 条` : `店铺未回复 ${state.pagination?.total ?? 0} 条`;
   document.querySelectorAll('[data-command="SAMPLES"]').forEach(button => { button.hidden = state.mode === "llm"; });
   $("count-manual").textContent = totals.manual;
+  $("count-failed").textContent = totals.failed;
+  $("failed-stat").hidden = !totals.failed;
+  $("failed-filter").hidden = !totals.failed;
+  if (!totals.failed && $("review-filter").value === "failed") $("review-filter").value = "all";
   $("manual-tab-count").textContent = totals.manual;
   $("manual-tab-count").hidden = !totals.manual;
   $("manual-page-count").textContent = `${totals.manual} 条`;
-  $("run-status").textContent = context.sourceAway ? "等待返回" : pauseRequested ? "正在暂停" : state.reading ? "读取中" : state.callState?.status === "retry_wait" ? "重试等待中" : state.status === "completed" && warning ? "已读完成 · 数量待核对" : runLabels[state.status];
+  $("run-status").textContent = status;
   $("run-status").dataset.status = displayStatus;
-  $("run-status").dataset.warning = Boolean(warning);
+  $("run-status").dataset.warning = Boolean(warning || totals.failed);
   $("task-empty").hidden = totals.total > 0;
   $("task-content").hidden = totals.total === 0;
   const processed = totals.replied + totals.generated + totals.manual;
   $("progress-value").textContent = `${processed}/${totals.total}`;
   const progress = totals.total ? processed / totals.total : 0;
-  $("progress-percent").textContent = `${Math.round(progress * 100)}%`;
+  const percent = totals.failed ? Math.floor(progress * 100) : Math.round(progress * 100);
+  $("progress-percent").textContent = `${percent}%`;
   $("progress-fill").style.transform = `scaleX(${progress})`;
-  $("task-progress").setAttribute("aria-valuenow", String(Math.round(progress * 100)));
+  $("task-progress").setAttribute("aria-valuenow", String(percent));
   $("clear-button").disabled = running;
   $("error-banner").hidden = !state.error && !state.endReason && !warning;
   $("error-banner").textContent = state.error || state.endReason || warning;
   $("error-banner").classList.toggle("notice-warning", Boolean(warning) && !state.error && !state.endReason);
-  const action = `${state.status === "paused" ? "继续" : "开始"}${state.mode === "llm" ? "生成" : "演示"}`;
-  $("run-button").textContent = context.sourceAway ? "等待返回" : pauseRequested ? "正在暂停…" : running ? "立即暂停" : state.status === "completed" ? warning ? "已读评价已完成" : "本轮已完成" : action;
+  $("run-button").textContent = action;
   $("run-button").disabled = controlBusy || switchingPage || context.sourceAway || (!running && context.bound && !context.pageReady) ||
     (!running && state.mode === "llm" && (!context.pageReady || !isReviewPage(context.source?.url))) ||
     (!running && !totals.pending && !(state.mode === "llm" && state.status === "paused")) || state.status === "completed";
-  $("run-button").setAttribute("aria-label", context.sourceAway ? "等待返回原评价页" : pauseRequested ? "正在暂停" : running ? "立即暂停当前处理" : $("run-button").textContent);
+  $("run-button").setAttribute("aria-label", accessibleAction);
   renderReviews(state, pauseRequested);
   renderRecovery();
   renderAccess();
@@ -296,7 +321,7 @@ function saveDraft() {
   const scope = captureContext();
   draftWrites = enqueueDraft(() => scope.request("COMMAND", { command: "DRAFT", payload: draft }));
   draftWrites.catch(() => {
-    try { scope.check(); } catch { return; }
+    if (!scope.isCurrent()) return;
     $("form-error").hidden = false;
     $("form-error").textContent = "文字草稿未能保存在本机，请重试或检查可用存储空间。";
   });
@@ -338,31 +363,7 @@ document.querySelector(".tabs").addEventListener("click", event => {
   if (button) switchTab(button.dataset.tab, true);
 });
 $("open-products").addEventListener("click", () => switchTab("products", true));
-async function checkComponentVersion() {
-  const button = $("check-component");
-  if (button.disabled) return;
-  button.disabled = true;
-  button.textContent = "检查中…";
-  $("update-status").textContent = "正在检查本机组件…";
-  try {
-    const { component } = await sendMessage({ type: "COMPONENT_CHECK" });
-    $("component-version").textContent = component.componentVersion ? `v${component.componentVersion}` : "未连接";
-    $("update-status").textContent = component.message;
-  } catch (error) {
-    $("component-version").textContent = "未连接";
-    $("update-status").textContent = error.message;
-  } finally {
-    button.disabled = false;
-    button.textContent = "重新检查组件";
-  }
-}
-$("open-updates").addEventListener("click", () => {
-  $("extension-version").textContent = `v${APP_VERSION}`;
-  $("component-version").textContent = context?.component?.componentVersion ? `v${context.component.componentVersion}` : "检查中…";
-  $("update-dialog").showModal();
-  void checkComponentVersion();
-});
-$("check-component").addEventListener("click", () => { void checkComponentVersion(); });
+initializeUpdates({ componentVersion: () => context?.component?.componentVersion });
 $("open-account").addEventListener("click", () => {
   $("account-error").hidden = true;
   $("account-dialog").showModal();
@@ -435,6 +436,13 @@ document.addEventListener("click", onAction(async event => {
     } finally { button.disabled = false; }
   }
   if (button.dataset.action === "media") showMedia(button.dataset.id);
+  if (["retry", "retry-all"].includes(button.dataset.action)) {
+    button.disabled = true;
+    try {
+      await command("RETRY_FAILED", button.dataset.action === "retry-all" ? { all: true } : { id: button.dataset.id });
+      notify("已将选中的失败评价加入处理队列。");
+    } finally { button.disabled = false; }
+  }
   if (button.dataset.action === "manual") {
     manualReviewId = button.dataset.id;
     $("dialog-reason").value = "";
@@ -458,7 +466,7 @@ async function controlTask(action) {
     await command(action);
     if (action === "END") notify("任务已结束，此窗口可以开始其他任务。记录已保留。");
   }
-  finally { try { scope.check(); controlBusy = false; pauseRequested = false; render(); } catch {} }
+  finally { if (scope.isCurrent()) { controlBusy = false; pauseRequested = false; render(); } }
 }
 $("run-button").addEventListener("click", onAction(() => controlTask(isActive(state) || state.reading ? "PAUSE" : "START")));
 $("read-reviews").addEventListener("click", onAction(async () => {
@@ -470,7 +478,7 @@ $("read-reviews").addEventListener("click", onAction(async () => {
     await command("READ_REVIEWS");
     switchTab("tasks");
     notify(readWarning(state) || `已读取 ${state.pagination.readCount ?? state.pagination.total} 条店铺未回复评价，仅生成回复，不自动发布。`);
-  } finally { try { scope.check(); readBusy = false; renderAccess(); } catch {} }
+  } finally { if (scope.isCurrent()) { readBusy = false; renderAccess(); } }
 }));
 $("end-button").addEventListener("click", onAction(() => controlTask("END")));
 
@@ -606,6 +614,12 @@ function connectPanel() {
   if (panelPort || !context?.contextId || context.valid === false) return;
   try {
     panelPort = chrome.runtime.connect({ name: `panel:${context.contextId}` });
+    panelPort.onMessage.addListener(async message => {
+      if (message.type !== "UPDATE_FLUSH") return;
+      let ok = true;
+      try { await draftWrites; await productEditor?.prepareToClose(); } catch { ok = false; }
+      panelPort?.postMessage({ type: "UPDATE_UI_READY", jobId: message.jobId, ok });
+    });
     panelPort.onDisconnect.addListener(() => {
       void chrome.runtime.lastError;
       panelPort = null;

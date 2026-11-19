@@ -15,6 +15,14 @@ export function element(tag, className = "", text) {
   return node;
 }
 
+export function actionButton(label, action, id) {
+  const button = element("button", "button text-button", label);
+  button.type = "button";
+  button.dataset.action = action;
+  if (id !== undefined) button.dataset.id = id;
+  return button;
+}
+
 export async function sendMessage(message) {
   let response;
   try { response = await chrome.runtime.sendMessage(message); }

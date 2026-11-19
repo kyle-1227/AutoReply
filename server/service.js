@@ -1,30 +1,37 @@
 import { digest } from "./context.js";
 import { generateReply } from "./reply-generator.js";
-import { validateReview } from "../extension/review-context.js";
+import { validateReview, readFailureRecord } from "../extension/review-context.js";
 import { productDocument, shopKey } from "../extension/product-catalog.js";
 import { RETENTION_MS, isActive, isFinished } from "../extension/model.js";
 import { categoryIds as normalizeCategories } from "../extension/categories.js";
+import { errorStatus } from "./llm-call.js";
 
 export const LEASE_MS = 90000;
 const fail = (message, status = 409) => { throw Object.assign(new Error(message), { status }); };
 
 function generationError(error, retryAt) {
   // Provider errors may echo buyer data; expose only fixed classifications.
-  const code = ["KEY_MISSING", "OUTPUT_INVALID", "INPUT_INVALID", "COST_STORAGE_FAILED"].includes(error.code) ? error.code : "GENERATION_FAILED";
+  const failureRecord = error.code === "VIDEO_FALLBACK_FAILED" ? readFailureRecord(error.failureRecord) : null;
+  const status = errorStatus(error);
+  const code = failureRecord ? "VIDEO_FALLBACK_FAILED" : ["KEY_MISSING", "OUTPUT_INVALID", "INPUT_INVALID", "COST_STORAGE_FAILED", "MODEL_REFUSED"].includes(error.code) ? error.code : "GENERATION_FAILED";
   const messages = {
     KEY_MISSING: "生成服务未配置模型 Key。",
     OUTPUT_INVALID: "模型输出未通过校验，请检查后继续。",
+    MODEL_REFUSED: "模型明确拒绝处理，任务已暂停，请人工核查。",
+    VIDEO_FALLBACK_FAILED: "视频模型与 Haiku 回退均失败，请稍后重试这条评价。",
     COST_STORAGE_FAILED: "费用记录无法保存，任务已暂停，未发起新的模型请求。请重新连接组件后继续。",
     401: "模型 Key 无效，请负责人通过安装向导更新模型账户。",
     402: "模型账户额度或支付受限，请检查 OpenRouter 账户。",
+    403: "模型访问受限，请核对账户权限和数据策略后继续。",
     404: "所选模型端点不可用，请负责人检查模型端点。",
     429: "模型服务限流，请等待后继续。",
   };
   return {
     code,
-    message: messages[code] || messages[error.status] || "模型调用失败，请检查生成服务和网络后继续。",
-    status: Number.isInteger(error.status) ? error.status : null,
+    message: messages[code] || messages[status] || "模型调用失败，请检查生成服务和网络后继续。",
+    status,
     retryAt: retryAt || null,
+    ...(failureRecord ? { failureRecord } : {}),
   };
 }
 

@@ -1,4 +1,4 @@
-import { WORKSPACE_KEY, TASK_KEY, DRAFT_KEY, RETENTION_MS, emptyTask, isFinished, holdsWindow } from "./model.js";
+import { WORKSPACE_KEY, TASK_KEY, DRAFT_KEY, RETENTION_MS, emptyTask, isFinished, holdsWindow, hasFailedReviews } from "./model.js";
 import { createQueue } from "./queue.js";
 
 export class WorkspaceStore {
@@ -36,38 +36,55 @@ export class WorkspaceStore {
     }
   }
 
+  async persist(next) {
+    await this.storage.set({ [WORKSPACE_KEY]: next });
+    this.data = next;
+  }
+
   saveRecord(record) {
     const copy = structuredClone(record);
     return this.enqueue(async () => {
       const previous = this.data.records[copy.id];
-      if (isFinished(copy.state)) copy.expiresAt = copy.state.expiresAt ||
+      if (hasFailedReviews(copy.state) || holdsWindow(copy.state)) { copy.expiresAt = null; delete copy.state.expiresAt; }
+      else if (isFinished(copy.state)) copy.expiresAt = (hasFailedReviews(previous?.state) ? null : copy.state.expiresAt) ||
         (isFinished(previous?.state) && previous.expiresAt) || Date.now() + RETENTION_MS;
-      else if (holdsWindow(copy.state)) { copy.expiresAt = null; delete copy.state.expiresAt; }
       else copy.expiresAt = previous?.state.status === "idle" ? copy.expiresAt : Date.now() + RETENTION_MS;
       this.stripOldPrompts(copy);
-      this.data = { ...this.data, records: { ...this.data.records, [copy.id]: copy } };
-      await this.storage.set({ [WORKSPACE_KEY]: this.data });
+      await this.persist({ ...this.data, records: { ...this.data.records, [copy.id]: copy } });
       return copy.expiresAt;
     });
   }
 
   cleanup(now = Date.now()) {
     return this.enqueue(async () => {
-      const expired = Object.values(this.data.records).filter(record => record.expiresAt && record.expiresAt <= now).map(record => record.id);
-      for (const id of expired) delete this.data.records[id];
-      let changed = expired.length > 0;
-      for (const record of Object.values(this.data.records)) {
-        if (record.draftUpdatedAt && record.draftUpdatedAt + RETENTION_MS <= now) {
-          record.draft = {}; record.productDraft = {}; delete record.draftUpdatedAt; changed = true;
+      let changed = false;
+      const expired = [];
+      const next = { ...this.data, records: { ...this.data.records } };
+      for (let record of Object.values(this.data.records)) {
+        if ((record.expiresAt || record.state.expiresAt) && hasFailedReviews(record.state)) {
+          record = { ...record, expiresAt: null, state: { ...record.state } };
+          delete record.state.expiresAt;
+          next.records[record.id] = record;
+          changed = true;
+        }
+        if (record.expiresAt && record.expiresAt <= now) {
+          expired.push(record.id);
+          delete next.records[record.id];
+          changed = true;
+        } else if (record.draftUpdatedAt && record.draftUpdatedAt + RETENTION_MS <= now) {
+          const copy = { ...record, draft: {}, productDraft: {} };
+          delete copy.draftUpdatedAt;
+          next.records[record.id] = copy;
+          changed = true;
         }
       }
       if (this.data.legacyExpiresAt <= now) {
-        this.legacy = null;
         await this.storage.remove?.([TASK_KEY, DRAFT_KEY, "autoreply.product-draft.v1"]);
-        delete this.data.legacyExpiresAt;
+        this.legacy = null;
+        delete next.legacyExpiresAt;
         changed = true;
       }
-      if (changed) await this.storage.set({ [WORKSPACE_KEY]: this.data });
+      if (changed) await this.persist(next);
       return expired;
     });
   }
@@ -86,9 +103,7 @@ export class WorkspaceStore {
       });
       Object.assign(state, { currentId: null, phase: 0, nextStepAt: null, status: "paused", generation: 0, error: "" });
       const imported = { ...record, state, draft: saved[DRAFT_KEY] || {}, productDraft: saved["autoreply.product-draft.v1"] || {} };
-      const next = { ...this.data, legacyImported: true, records: { ...this.data.records, [record.id]: imported } };
-      await this.storage.set({ [WORKSPACE_KEY]: next });
-      this.data = next;
+      await this.persist({ ...this.data, legacyImported: true, records: { ...this.data.records, [record.id]: imported } });
       return structuredClone(imported);
     });
   }

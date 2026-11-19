@@ -21,7 +21,7 @@ export function getProductContext({ products, product }) {
   return { documentId: item.id, version: String(item.version), name: item.name, categoryId: categoryId(item.categoryId), facts };
 }
 
-export function buildLlmRequest({ review, source, model, productContext = null, categoryIds = [], prompt = DEFAULT_PROMPT, structuredOutputs = model === HAIKU_MODEL }) {
+export function buildLlmRequest({ review, source, model, productContext = null, categoryIds = [], prompt = DEFAULT_PROMPT, structuredOutputs = model === HAIKU_MODEL, videoOmitted = false }) {
   validateReview(review);
   const shop = shopKey(source);
   const category = resolveCategory(productContext, categoryIds), supplement = CATEGORY_RULES[category.id] || "";
@@ -37,7 +37,8 @@ export function buildLlmRequest({ review, source, model, productContext = null, 
   ];
   if (model.startsWith("anthropic/")) for (const block of [prefix[0], prefix.at(-1)]) block.cache_control = { type: "ephemeral" };
   const contextKey = digest([shop, productContext, prompt, category.id, supplement, model, structuredOutputs]);
-  const content = [{ type: "text", text: JSON.stringify({ rating: review.rating, text: review.text, product: review.product }) },
+  const content = [{ type: "text", text: JSON.stringify({ rating: review.rating, text: review.text, product: review.product,
+    ...(videoOmitted ? { mediaContext: { videoOmitted: true } } : {}) }) },
     ...review.attachments.map(item => ({ type: `${item.kind}_url`, [`${item.kind}_url`]: { url: item.url } }))];
   const parameters = { max_tokens: 2048, session_id: contextKey };
   if (model === HAIKU_MODEL) parameters.reasoning = { effort: "low" };
@@ -51,7 +52,10 @@ export function buildLlmRequest({ review, source, model, productContext = null, 
 export function parseReplyResult(response, { productContext = null } = {}) {
   const invalid = () => Object.assign(new Error("模型输出不符合决定、长度或事实引用约定。"), { code: "OUTPUT_INVALID" });
   const choice = response?.choices?.[0];
-  if (choice?.finish_reason !== "stop" || choice.message?.refusal || typeof choice.message?.content !== "string") throw invalid();
+  if (choice?.message?.refusal || choice?.finish_reason === "content_filter") {
+    throw Object.assign(new Error("模型明确拒绝处理，任务已暂停，请人工核查。"), { code: "MODEL_REFUSED" });
+  }
+  if (choice?.finish_reason !== "stop" || typeof choice.message?.content !== "string") throw invalid();
   let result;
   try { result = JSON.parse(choice.message.content); } catch { throw invalid(); }
   if (!result || typeof result !== "object" || Array.isArray(result) ||

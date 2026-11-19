@@ -4,6 +4,7 @@
 !include "LogicLib.nsh"
 !include "x64.nsh"
 !include "WinVer.nsh"
+!include "FileFunc.nsh"
 
 !ifndef APP_VERSION
   !error "APP_VERSION is required"
@@ -27,6 +28,8 @@ VIAddVersionKey "ProductVersion" "${APP_VERSION}"
 Var KeyInput
 Var KeyValue
 Var Dialog
+Var Isolated
+Var AutoUpdate
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
 Page custom KeyPage KeyPageLeave
@@ -38,15 +41,38 @@ Page custom KeyPage KeyPageLeave
 !insertmacro MUI_LANGUAGE "SimpChinese"
 
 !macro CheckNotRunning
+  ${If} $AutoUpdate == 1
+    nsExec::ExecToStack '"$INSTDIR\AutoReplyHost.exe" --in-use'
+    Pop $0
+    Pop $1
+    ${If} $0 != 0
+      SetErrorLevel 20
+      Abort
+    ${EndIf}
+  ${ElseIf} $Isolated != 1
   System::Call 'kernel32::OpenMutexW(i 0x100000, i 0, w "Local\AutoReply.Component.InUse") p.r0'
   ${If} $0 != 0
     System::Call 'kernel32::CloseHandle(p r0)'
+    IfSilent +2
     MessageBox MB_OK|MB_ICONINFORMATION "AutoReply 正在使用。请先暂停任务并关闭使用插件的店铺环境，再运行安装或卸载程序。"
+    SetErrorLevel 20
     Abort
+  ${EndIf}
   ${EndIf}
 !macroend
 
 Function .onInit
+  ${GetParameters} $R0
+  ClearErrors
+  ${GetOptions} $R0 "/ISOLATED" $R1
+  ${IfNot} ${Errors}
+    StrCpy $Isolated 1
+  ${EndIf}
+  ClearErrors
+  ${GetOptions} $R0 "/AUTOUPDATE" $R1
+  ${IfNot} ${Errors}
+    StrCpy $AutoUpdate 1
+  ${EndIf}
   ${IfNot} ${RunningX64}
     MessageBox MB_OK|MB_ICONSTOP "当前安装包适用于 Windows 10 / 11 x64。"
     Abort
@@ -141,20 +167,26 @@ Section "AutoReply"
   SetOutPath "$INSTDIR"
   File /r "${PAYLOAD}\*"
   Call SaveKey
-  WriteRegStr HKCU "Software\Microsoft\Edge\NativeMessagingHosts\com.autoreply.workflow" "" "$INSTDIR\native-host.json"
-  WriteRegStr HKCU "Software\Google\Chrome\NativeMessagingHosts\com.autoreply.workflow" "" "$INSTDIR\native-host.json"
-  WriteRegStr HKCU "Software\Chromium\NativeMessagingHosts\com.autoreply.workflow" "" "$INSTDIR\native-host.json"
-  WriteUninstaller "$INSTDIR\Uninstall.exe"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AutoReply" "DisplayName" "AutoReply"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AutoReply" "DisplayVersion" "${APP_VERSION}"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AutoReply" "InstallLocation" "$INSTDIR"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AutoReply" "UninstallString" '"$INSTDIR\Uninstall.exe"'
-  CreateDirectory "$SMPROGRAMS\AutoReply"
-  CreateShortcut "$SMPROGRAMS\AutoReply\安装说明.lnk" "$INSTDIR\安装说明.md"
   ${If} $EXEPATH != "$INSTDIR\AutoReplySetup.exe"
     CopyFiles /SILENT "$EXEPATH" "$INSTDIR\AutoReplySetup.exe"
   ${EndIf}
-  CreateShortcut "$SMPROGRAMS\AutoReply\更新模型账户.lnk" "$INSTDIR\AutoReplySetup.exe"
+  ${If} $Isolated == 1
+    FileOpen $0 "$INSTDIR\.autoreply-isolated" w
+    FileWrite $0 "1"
+    FileClose $0
+  ${Else}
+    WriteRegStr HKCU "Software\Microsoft\Edge\NativeMessagingHosts\com.autoreply.workflow" "" "$INSTDIR\native-host.json"
+    WriteRegStr HKCU "Software\Google\Chrome\NativeMessagingHosts\com.autoreply.workflow" "" "$INSTDIR\native-host.json"
+    WriteRegStr HKCU "Software\Chromium\NativeMessagingHosts\com.autoreply.workflow" "" "$INSTDIR\native-host.json"
+    WriteUninstaller "$INSTDIR\Uninstall.exe"
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AutoReply" "DisplayName" "AutoReply"
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AutoReply" "DisplayVersion" "${APP_VERSION}"
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AutoReply" "InstallLocation" "$INSTDIR"
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AutoReply" "UninstallString" '"$INSTDIR\Uninstall.exe"'
+    CreateDirectory "$SMPROGRAMS\AutoReply"
+    CreateShortcut "$SMPROGRAMS\AutoReply\安装说明.lnk" "$INSTDIR\安装说明.md"
+    CreateShortcut "$SMPROGRAMS\AutoReply\更新模型账户.lnk" "$INSTDIR\AutoReplySetup.exe"
+  ${EndIf}
 SectionEnd
 
 Section "Uninstall"

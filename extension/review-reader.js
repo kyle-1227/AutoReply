@@ -5,6 +5,33 @@ export const isReviewPage = url => {
   catch { return false; }
 };
 
+// Catalog setup needs the current shop, not a review scan or a model call.
+export async function readShopSource(source, { browser = chrome } = {}) {
+  const match = /^https:\/\/seller-(my|sg)\.tiktok\.com(?:\/|$)/.exec(source.url || "");
+  if (!match) throw new Error("请在 TikTok Shop 马来西亚站或新加坡站的店铺页面管理商品资料。");
+  const check = async () => {
+    const tab = await browser.tabs.get(source.tabId);
+    if (tab.url !== source.url || tab.windowId !== source.windowId || tab.status !== "complete" || tab.discarded || tab.frozen) {
+      throw new Error("店铺页面已改变或正在加载，请等待页面就绪后刷新资料。");
+    }
+  };
+  await check();
+  const results = await browser.scripting.executeScript({ target: { tabId: source.tabId },
+    func: expectedUrl => {
+      if (location.href !== expectedUrl) return null;
+      try {
+        const seller = JSON.parse(document.getElementById("atlas_inject_workbench-base-info")?.textContent || "{}").seller_base_info?.seller;
+        return { shopId: seller?.seller_id, market: seller?.region_code };
+      } catch { return null; }
+    }, args: [source.url] });
+  await check();
+  const identity = results.find(item => item.frameId === 0)?.result;
+  if (typeof identity?.shopId !== "string" || !/^\d{1,50}$/.test(identity.shopId) || identity.market !== match[1].toUpperCase()) {
+    throw new Error("暂时无法识别当前店铺，请确认已登录并等待页面加载后点击“刷新”重试。");
+  }
+  return { platform: "tiktok_shop", market: identity.market, shopId: identity.shopId };
+}
+
 /** Runs only in the bound page's MAIN world. No extension data or secrets enter it. */
 export async function observeReviewPage(operationId) {
   const key = Symbol.for("autoreply.review-reader");
@@ -12,14 +39,14 @@ export async function observeReviewPage(operationId) {
   const originalUrl = location.href;
   const originalFetch = window.fetch;
   let waiter = null, stopped = false;
-  const renderCancellations = new Set();
+  const pendingCancellations = new Set();
   const fail = message => { throw new Error(message); };
   const checked = node => node?.classList.contains("pulse-toggle-button-checked");
   const filter = () => document.querySelector('[data-id="product.rating.filter_awaiting_reply"]');
   const cancel = () => {
     stopped = true;
     waiter?.reject(new Error("评价读取已停止。"));
-    for (const stop of renderCancellations) stop();
+    for (const stop of pendingCancellations) stop();
   };
   window[key] = { operationId, cancel };
 
@@ -103,14 +130,24 @@ export async function observeReviewPage(operationId) {
       const timeout = setTimeout(() => finish(new Error("评价分页未恢复，请重试。")), 8000);
       const observer = new MutationObserver(check);
       const stop = () => finish(new Error("评价读取已停止。"));
-      renderCancellations.add(stop);
-      function finish(error) { clearTimeout(timeout); observer.disconnect(); renderCancellations.delete(stop); error ? reject(error) : resolve(); }
+      pendingCancellations.add(stop);
+      function finish(error) { clearTimeout(timeout); observer.disconnect(); pendingCancellations.delete(stop); error ? reject(error) : resolve(); }
       function check() {
         if (stopped || location.href !== originalUrl) return finish(new Error("评价读取已停止或来源页面已改变。"));
         if (test()) finish();
       }
       observer.observe(document.body, { childList: true, subtree: true, attributes: true });
       check();
+    });
+  }
+
+  function waitBeforeNextPage() {
+    return new Promise((resolve, reject) => {
+      const stop = () => finish(new Error("评价读取已停止。"));
+      const timeout = setTimeout(() => finish(), 2000);
+      function finish(error) { clearTimeout(timeout); pendingCancellations.delete(stop); error ? reject(error) : resolve(); }
+      pendingCancellations.add(stop);
+      if (stopped) stop();
     });
   }
 
@@ -158,6 +195,7 @@ export async function observeReviewPage(operationId) {
           readCount: reviews.length, rawCount, complete: reviews.length === batch.total } };
       }
       if (!added || reviews.length >= batch.total) fail("评价分页与总数不一致，已停止循环。");
+      await waitBeforeNextPage();
       batch = await query(() => next.click());
       page++;
     }

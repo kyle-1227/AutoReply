@@ -58,6 +58,7 @@
             <div><span class="stat-label">待处理</span><span id="count-pending" class="stat-value">0</span></div>
             <div><span id="result-count-label" class="stat-label">模拟已回复</span><span id="count-replied" class="stat-value">0</span></div>
             <div><span class="stat-label">待人工</span><span id="count-manual" class="stat-value">0</span></div>
+            <div id="failed-stat" hidden><span class="stat-label">失败</span><span id="count-failed" class="stat-value">0</span></div>
             <div class="processed-stat"><span class="stat-label">已处理</span><span id="progress-value">0/0</span></div>
           </div>
           <div class="progress-row"><div id="task-progress" class="progress" role="progressbar" aria-label="已处理评价" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progress-fill"></div></div><span id="progress-percent">0%</span></div>
@@ -67,7 +68,7 @@
           </div>
         </section>
 
-        <div class="queue-heading"><h2>评价队列</h2><select id="review-filter" aria-label="筛选评价"><option value="all">全部评价</option><option value="pending">待处理</option><option value="generated">已生成待确认</option><option value="replied">模拟已回复</option><option value="manual">待人工</option></select></div>
+        <div class="queue-heading"><h2>评价队列</h2><select id="review-filter" aria-label="筛选评价"><option value="all">全部评价</option><option value="pending">待处理</option><option id="failed-filter" value="failed" hidden>生成失败</option><option value="generated">已生成待确认</option><option value="replied">模拟已回复</option><option value="manual">待人工</option></select></div>
 
         <button id="import-legacy" type="button" class="button secondary" hidden>恢复旧版记录</button>
         <p id="retention-status" class="notice" role="status" hidden></p>
@@ -134,7 +135,7 @@
         <form id="product-form" novalidate>
           <div class="product-field"><label class="field-label" for="product-name">产品名称</label><input id="product-name" type="text" placeholder="输入产品名称" required></div>
           <div class="product-field"><label class="field-label" for="product-category">主要类目</label><select id="product-category" aria-label="商品主要类目"></select></div>
-          <p id="products-status" class="product-field muted" role="status">先读取当前店铺评价，再添加资料。</p>
+          <p id="products-status" class="product-field muted" role="status">正在识别当前店铺…</p>
           <div class="product-field"><label class="field-label" for="product-aliases">识别名称 / 别名（可选，一行一个）</label><textarea id="product-aliases" rows="2" placeholder="例如 Konjac Rice"></textarea></div>
           <div class="product-field"><label class="field-label" for="product-notes">规格简要说明（可选）</label><textarea id="product-notes" rows="2"></textarea></div>
           <details class="product-field"><summary>明确关联商品 ID（可选）</summary><label class="field-label" for="product-platform-id">同款多个商品 ID，一行一个</label><textarea id="product-platform-id" rows="2"></textarea></details>
@@ -174,10 +175,19 @@
       <dl class="version-details">
         <div><dt>插件版本</dt><dd id="extension-version">—</dd></div>
         <div><dt>本机组件</dt><dd id="component-version">—</dd></div>
+        <div><dt>最新正式版</dt><dd id="latest-version">—</dd></div>
       </dl>
       <p id="update-status" role="status" aria-live="polite"></p>
-      <p class="product-field">请下载不低于当前版本的配套安装包，安装后重新加载插件。</p>
-      <div class="form-actions"><a class="button primary" href="https://github.com/kyle-1227/AutoReply/releases" target="_blank" rel="noopener noreferrer">打开更新页</a><button id="check-component" type="button" class="button secondary">重新检查组件</button></div>
+      <progress id="update-progress" aria-label="安装包下载进度" hidden></progress>
+      <div class="form-actions"><button id="install-update" type="button" class="button primary" disabled>一键更新</button><button id="check-component" type="button" class="button secondary">检查更新</button></div>
+      <details id="update-connection"><summary>BitBrowser 连接设置</summary>
+        <form id="update-settings" class="product-field">
+          <label class="field-label" for="bit-port">本机 Local API 端口</label><input id="bit-port" type="number" min="1" max="65535" value="54345" required>
+          <label class="field-label" for="bit-token">API 认证信息</label><input id="bit-token" type="password" autocomplete="off" placeholder="留空保留已保存的值">
+          <p id="bit-status" role="status"></p>
+          <div class="form-actions"><button type="submit" class="button secondary">保存连接</button><button id="test-bit" type="button" class="button secondary">测试连接</button></div>
+        </form>
+      </details>
     </dialog>
     <dialog id="account-dialog" aria-labelledby="account-title">
       <form id="account-form" novalidate>

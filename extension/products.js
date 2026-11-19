@@ -1,4 +1,4 @@
-import { $, element, downloadJson } from "./ui.js";
+import { $, element, actionButton, downloadJson } from "./ui.js";
 import { createQueue } from "./queue.js";
 import { CATEGORIES, CATEGORY_SOURCE_NAMES, categoryName, resolveCategory } from "./categories.js";
 
@@ -13,12 +13,12 @@ export function initializeProducts({ notify, captureContext, initialDraft = {}, 
   function saveDraft() {
     const scope = captureContext(), payload = { ...values(), editingId, editingVersion };
     draftWrites = enqueueDraft(() => scope.request("COMMAND", { command: "PRODUCT_DRAFT", payload }));
-    draftWrites.catch(() => { try { scope.check(); showError("草稿保存失败，请重试。"); } catch {} });
+    draftWrites.catch(() => { if (scope.isCurrent()) showError("草稿保存失败，请重试。"); });
   }
   function showError(message = "") { $("product-error").textContent = message; $("product-error").hidden = !message; }
   function failed(error) { if (!error.stalePage) showError(error.message); }
   function controls() {
-    $("refresh-products").disabled = busy || refreshing || !shop;
+    $("refresh-products").disabled = busy || refreshing;
     $("refresh-products").textContent = refreshing ? "刷新中…" : "刷新";
     $("refresh-products").setAttribute("aria-busy", String(refreshing));
     $("open-categories").disabled = busy || refreshing || !shop;
@@ -72,11 +72,7 @@ export function initializeProducts({ notify, captureContext, initialDraft = {}, 
       card.append(element("p", "product-details", product.details));
       if (product.skuNotes) card.append(element("p", "product-details", product.skuNotes));
       const actions = element("div", "card-actions");
-      for (const [action, label] of [["edit", "编辑"], ["delete", "删除"]]) {
-        const button = element("button", "button text-button", label);
-        button.type = "button"; button.dataset.action = action; button.dataset.id = product.id;
-        actions.append(button);
-      }
+      actions.append(actionButton("编辑", "edit", product.id), actionButton("删除", "delete", product.id));
       card.append(actions); return card;
     }));
     controls();
@@ -222,7 +218,7 @@ export function initializeProducts({ notify, captureContext, initialDraft = {}, 
   });
   for (const id of ["categories-back", "skip-categories"]) $(id).addEventListener("click", () => { if (!busy) showPage("products"); });
   $("refresh-products").addEventListener("click", async () => {
-    if (busy || refreshing || !shop) return;
+    if (busy || refreshing) return;
     try {
       if (await refresh()) notify(products.length ? "已刷新本店资料。" : "当前环境暂无本店资料；如其他电脑已保存，请先完成 BitBrowser 环境同步。");
     } catch (error) { failed(error); }

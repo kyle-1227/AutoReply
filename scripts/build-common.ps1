@@ -1,7 +1,6 @@
 ﻿$ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $metadata = Get-Content -LiteralPath (Join-Path $projectRoot 'package.json') -Encoding UTF8 -Raw | ConvertFrom-Json
-if ($metadata.version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid package version.' }
 & node (Join-Path $PSScriptRoot 'version.mjs') --check
 if ($LASTEXITCODE -ne 0) { throw 'Source and documentation versions must match before packaging.' }
 $releaseRoot = Join-Path $projectRoot 'releases'
@@ -11,7 +10,7 @@ New-Item -ItemType Directory -Path $releaseRoot -Force | Out-Null
 function Get-Sha256([string]$Path) {
     $algorithm = [Security.Cryptography.SHA256]::Create()
     $stream = [IO.File]::OpenRead($Path)
-    try { return -join ($algorithm.ComputeHash($stream) | ForEach-Object { $_.ToString('x2') }) }
+    try { return [BitConverter]::ToString($algorithm.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
     finally { $stream.Dispose(); $algorithm.Dispose() }
 }
 
@@ -24,6 +23,8 @@ function Write-ReleaseIndex {
     })
     $index = [ordered]@{ version = $metadata.version; builtAt = [DateTime]::UtcNow.ToString('o'); files = $files } | ConvertTo-Json -Depth 5
     [IO.File]::WriteAllText((Join-Path $releaseRoot 'CURRENT.json'), $index + [Environment]::NewLine, (New-Object Text.UTF8Encoding $false))
+    $files | ForEach-Object { "$($_.sha256)  $($_.name)" } | Set-Content -LiteralPath (Join-Path $releaseRoot 'SHA256SUMS.txt') -Encoding ASCII
+    Copy-Item -LiteralPath (Join-Path $projectRoot '安装说明.md') -Destination (Join-Path $releaseRoot 'INSTALL.zh-CN.md') -Force
     "# AutoReply $($metadata.version)`n`nCurrent deliverables are listed with SHA-256 hashes in CURRENT.json. Older packages are historical; see archive/." |
         Set-Content -LiteralPath (Join-Path $releaseRoot 'README.md') -Encoding UTF8
 }
