@@ -17,6 +17,9 @@ function Get-Sha256([string]$Path) {
 function Write-ReleaseIndex {
     $names = @("autoreply-extension-v$($metadata.version).zip", "AutoReply-Setup-$($metadata.version)-win-x64.exe")
     foreach ($name in $names) { if (-not (Test-Path -LiteralPath (Join-Path $releaseRoot $name))) { return } }
+    if (Test-Path -LiteralPath (Join-Path $releaseRoot 'AutoReply-Install.exe') -PathType Leaf) {
+        $names += 'AutoReply-Install.exe'
+    }
     $files = @($names | ForEach-Object {
         $path = Join-Path $releaseRoot $_
         [ordered]@{ name = $_; bytes = (Get-Item -LiteralPath $path).Length; sha256 = Get-Sha256 $path }

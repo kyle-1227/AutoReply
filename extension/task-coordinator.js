@@ -3,6 +3,7 @@ import { TaskRunner } from "./task-runner.js";
 import { WorkspaceStore, createRecord } from "./workspace-store.js";
 import { createQueue } from "./queue.js";
 import { readReviews, readShopSource, isReviewPage } from "./review-reader.js";
+import { publicationKey, publishReply } from "./review-publisher.js";
 import { generateReply, NativeClient } from "./native-client.js";
 import { ProductCatalog, catalogKey, productDocument } from "./product-catalog.js";
 import { CostStore } from "./cost-store.js";
@@ -20,6 +21,7 @@ export class TaskCoordinator {
     this.catalog = new ProductCatalog(browser.storage.local);
     this.records = new Map();
     this.runners = new Map();
+    this.publishing = new Set();
     this.contexts = new Map();
     this.enqueue = createQueue();
     this.restoring = true;
@@ -117,10 +119,27 @@ export class TaskCoordinator {
         generateReply: (review, options) => (this.runnerOptions.generateReply || generateReply)(review, {
           ...options, taskId, client: this.native, products: this.runners.get(taskId).productSnapshot || [],
         }),
+        publishReply: (review, options) => this.publish(taskId, review, options),
       });
       this.runners.set(taskId, runner);
     }
     return this.runners.get(taskId);
+  }
+
+  async publish(taskId, review, options) {
+    const context = this.contextForTask(taskId);
+    const source = this.runner(taskId).state.reviewSource;
+    const key = publicationKey(review);
+    if (!context?.occupied || !key || key !== publicationKey({ ...review, source })) {
+      throw Object.assign(new Error("回复所属店铺与当前任务不一致，已停止发布。"), { code: "PUBLISH_FAILED" });
+    }
+    const attempted = [...this.records].some(([id, { state }]) => id !== taskId && state.reviews.some(item =>
+      (item.status === "replied" || ["dispatching", "uncertain"].includes(item.publishState)) && publicationKey(item) === key));
+    if (this.publishing.has(key) || attempted) return { state: "duplicate" };
+    this.publishing.add(key);
+    try {
+      return await (this.runnerOptions.publishReply || publishReply)(context, review, { browser: this.browser, ...options });
+    } finally { this.publishing.delete(key); }
   }
 
   contextForTask(taskId) { return this.contexts.values().find(item => item.taskId === taskId); }
@@ -352,7 +371,7 @@ export class TaskCoordinator {
     const tab = await this.browser.tabs.get(context.tabId);
     if (tab.windowId !== context.windowId || tab.url !== context.url) throw new Error("来源页面已改变，请在目标页面重新打开插件。");
     if (runner.state.mode === "llm" && (!isReviewPage(tab.url) || tab.status !== "complete" || tab.discarded || tab.frozen)) {
-      throw new Error("请在已加载完成的店铺评论页开始生成。");
+      throw new Error("请等店铺评价页面加载完成后，再开始生成并发布。");
     }
     // Freeze this run's material in memory; it never enters saved task records.
     if (runner.state.mode === "llm") {

@@ -51,8 +51,11 @@ function productDescription(review) {
   return input ? [input.rating === null ? "评分未知" : `${input.rating} 星`, input.product.title, input.product.variant].filter(Boolean).join(" · ") : "";
 }
 
-function statusBadge(status) {
-  const badge = element("span", "badge", reviewLabels[status]);
+function statusBadge(review) {
+  const { status } = review;
+  const label = status === "replied" && review.platformReview ? "已发布"
+    : review.publishState === "uncertain" ? "发布待核对" : reviewLabels[status];
+  const badge = element("span", "badge", label);
   badge.dataset.status = status;
   return badge;
 }
@@ -75,7 +78,7 @@ function reviewCard(review, number, reading = false) {
   }
   if (number !== undefined) {
     const heading = element("div", "card-heading");
-    heading.append(element("span", "review-number", `评价 ${String(number).padStart(2, "0")}`), statusBadge(review.status));
+    heading.append(element("span", "review-number", `评价 ${String(number).padStart(2, "0")}`), statusBadge(review));
     card.append(heading);
   }
   // Pending queue items already show their full text in the expanded summary.
@@ -98,7 +101,7 @@ function reviewCard(review, number, reading = false) {
     actions.append(buttons);
   }
   if (actions.childElementCount) card.append(actions);
-  if (review.reply && ["replied", "generated"].includes(review.status)) {
+  if (review.reply) {
     const reply = element("div", "reply-box");
     renderReply(reply, review.reply);
     card.append(reply);
@@ -133,7 +136,7 @@ function queueItem(review, number, open, reading) {
   const snippet = element("span", "review-snippet", review.text || "仅图片／视频评价");
   if (review.status !== "pending") {
     const meta = element("span", "review-meta");
-    meta.append(statusBadge(review.status), element("span", "review-number", `评价 ${String(number).padStart(2, "0")}`));
+    meta.append(statusBadge(review), element("span", "review-number", `评价 ${String(number).padStart(2, "0")}`));
     copy.append(meta);
   }
   copy.append(snippet);
@@ -160,7 +163,7 @@ function queueItem(review, number, open, reading) {
 
 function renderLists(state, filter) {
   const { reviews } = state;
-  const key = JSON.stringify([filter, reviews, state.queueCursor, state.reading]);
+  const key = JSON.stringify([filter, reviews, state.queueCursor, state.reading, state.mode]);
   if (key === renderedListKey) return; // Keep focus and disclosure state on unchanged snapshots.
   renderedListKey = key;
   const expanded = new Set([...$("review-list").querySelectorAll("details[data-review-id][open]")].map(item => item.dataset.reviewId));
@@ -172,7 +175,8 @@ function renderLists(state, filter) {
     if (review.status !== "pending") groups[review.status]?.push({ review, number: index + 1 });
   });
   const sections = [];
-  for (const [status, label] of Object.entries(groupLabels)) {
+  for (const [status, baseLabel] of Object.entries(groupLabels)) {
+    const label = status === "replied" && state.mode === "llm" ? "已发布" : baseLabel;
     if (filter !== "all" && filter !== status) continue;
     const items = groups[status];
     if (filter === "all" && status !== "pending" && !items.length) continue;

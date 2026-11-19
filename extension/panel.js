@@ -251,6 +251,7 @@ function taskLabels(running, failed, warning) {
   if (running) {
     let status = runLabels[state.status];
     if (state.reading) status = "读取中";
+    else if (state.reviews.some(review => review.id === state.currentId && review.publishState)) status = "发布中";
     else if (state.callState?.status === "retry_wait") status = "重试等待中";
     else if (state.status === "running" && state.callState?.stage === "haiku") status = "Haiku 回退中";
     return [status, "立即暂停", "立即暂停当前处理"];
@@ -260,7 +261,7 @@ function taskLabels(running, failed, warning) {
     if (warning) return ["已读完成 · 数量待核对", "已读评价已完成"];
     return [runLabels.completed, "本轮已完成"];
   }
-  return [runLabels[state.status], `${state.status === "paused" ? "继续" : "开始"}${state.mode === "llm" ? "生成" : "演示"}`];
+  return [runLabels[state.status], `${state.status === "paused" ? "继续" : "开始"}${state.mode === "llm" ? "生成并发布" : "演示"}`];
 }
 
 function render() {
@@ -273,10 +274,12 @@ function render() {
   const [status, action, accessibleAction = action] = taskLabels(running, totals.failed, warning);
   const displayStatus = pauseRequested ? "paused" : state.status;
   $("count-pending").textContent = totals.waiting;
-  $("count-replied").textContent = totals.generated + totals.replied;
-  $("result-count-label").textContent = state.mode === "llm" ? "已生成" : "模拟已回复";
+  $("count-replied").textContent = totals.replied;
+  const replyLabel = state.mode === "llm" ? "已发布" : "模拟已回复";
+  $("result-count-label").textContent = replyLabel;
+  $("replied-filter").textContent = replyLabel;
   $("read-summary").textContent = !state.reviewSource ? "" : warning
-    ? `已读取 ${state.pagination.readCount} 条 · 平台显示 ${state.pagination.total} 条` : `店铺未回复 ${state.pagination?.total ?? 0} 条`;
+    ? `已读取 ${state.pagination.readCount} 条 · 平台显示 ${state.pagination.total} 条` : `最近读取的未回复评价 ${state.pagination?.total ?? 0} 条`;
   document.querySelectorAll('[data-command="SAMPLES"]').forEach(button => { button.hidden = state.mode === "llm"; });
   $("count-manual").textContent = totals.manual;
   $("count-failed").textContent = totals.failed;
@@ -477,7 +480,7 @@ $("read-reviews").addEventListener("click", onAction(async () => {
   try {
     await command("READ_REVIEWS");
     switchTab("tasks");
-    notify(readWarning(state) || `已读取 ${state.pagination.readCount ?? state.pagination.total} 条店铺未回复评价，仅生成回复，不自动发布。`);
+    notify(readWarning(state) || `已读取 ${state.pagination.readCount ?? state.pagination.total} 条未回复评价。开始任务后，符合规则的回复将公开发布。`);
   } finally { if (scope.isCurrent()) { readBusy = false; renderAccess(); } }
 }));
 $("end-button").addEventListener("click", onAction(() => controlTask("END")));

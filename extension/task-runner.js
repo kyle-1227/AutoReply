@@ -10,6 +10,12 @@ const reviewContent = review => JSON.stringify([review.reviewId, review.text, re
   review.platformReply.count, review.platformReply.canReply,
   review.attachments.map(({ kind, url }) => [kind, new URL(url).pathname]),
 ]);
+const publishUncertain = "无法确认这条评价是否已发布。请先在店铺评价页核对，任务不会自动重发这条回复。";
+const publishManual = {
+  ineligible: "评价已回复、已移出未回复列表或当前不允许回复，请在店铺评价页核对。",
+  changed: "评价内容或商品信息已变化，请在店铺评价页核对后处理。",
+  duplicate: "其他任务已处理这条评价或正在发布，请在店铺评价页核对。",
+};
 
 /**
  * One owner for a task queue. Storage, generation and browser reads are injected so
@@ -19,8 +25,8 @@ export class TaskRunner {
   constructor({ load, save, onChange = () => {}, wakeup = async () => {}, now = Date.now,
     setTimer = (callback, delay) => setTimeout(callback, delay),
     clearTimer = timer => clearTimeout(timer), stepMs = STEP_MS, canProcess = async () => true,
-    readReviews, generateReply, canRead = async () => true, controlRun = async () => {} }) {
-    Object.assign(this, { load, save, onChange, wakeup, now, setTimer, clearTimer, stepMs, canProcess, readReviews, generateReply, canRead, controlRun });
+    readReviews, generateReply, publishReply, canRead = async () => true, controlRun = async () => {} }) {
+    Object.assign(this, { load, save, onChange, wakeup, now, setTimer, clearTimer, stepMs, canProcess, readReviews, generateReply, publishReply, canRead, controlRun });
     this.state = emptyTask();
     this.enqueue = createQueue();
     this.timer = null;
@@ -51,8 +57,14 @@ export class TaskRunner {
     const current = this.state.reviews.find(review => review.id === this.state.currentId);
     if (current?.status === "processing") {
       if (this.state.mode === "llm") this.state.queueCursor = { productId: reviewProductId(current), reviewId: current.id };
-      current.status = "pending";
-      current.reply = "";
+      if (current.publishState === "dispatching") {
+        current.status = "manual";
+        current.publishState = "uncertain";
+        current.manualReason = publishUncertain;
+      } else {
+        current.status = "pending";
+        if (current.publishState !== "ready") current.reply = "";
+      }
     }
     this.state.currentId = null;
     this.state.phase = 0;
@@ -67,7 +79,7 @@ export class TaskRunner {
     if (isActive(this.state) && (newBrowserSession || this.state.mode === "llm")) {
       this.resetCurrent();
       this.state.status = "paused";
-      if (this.state.mode === "llm") this.state.error = "生成任务已恢复为暂停，请确认来源页后继续。";
+      if (this.state.mode === "llm") this.state.error = "店铺任务已恢复为暂停，请确认来源页和待人工事项后继续。";
     }
     if (this.state.status === "running") this.claimNext();
     if (this.state.mode === "llm" && this.state.reviewSource) {
@@ -198,6 +210,7 @@ export class TaskRunner {
       if (!present.has(key) && ["pending", "failed"].includes(review.status)) {
         review.status = "manual";
         review.manualReason = "本次未回复列表中已不存在该评价，请人工核对店铺状态。";
+        if (review.publishState === "ready") review.publishState = "skipped";
         delete this.state.expiresAt;
       }
     }
@@ -207,7 +220,12 @@ export class TaskRunner {
       let review = previous.get(identity);
       const eligible = input.platformReply.count === 0 && input.platformReply.canReply;
       if (!eligible) {
-        if (["pending", "failed"].includes(review?.status)) { review.status = "manual"; review.manualReason = "店铺评价已回复或当前不允许回复，请人工核对。"; delete this.state.expiresAt; }
+        if (["pending", "failed"].includes(review?.status)) {
+          review.status = "manual";
+          review.manualReason = "店铺评价已回复或当前不允许回复，请人工核对。";
+          if (review.publishState === "ready") review.publishState = "skipped";
+          delete this.state.expiresAt;
+        }
         continue;
       }
       if (!review) {
@@ -217,9 +235,12 @@ export class TaskRunner {
         previous.set(identity, review);
         added++;
       } else if (reviewContent(review.platformReview) !== reviewContent(input)) {
+        if (review.status === "replied" || (review.publishState && review.status === "manual") ||
+            (this.publishReply && review.status === "generated")) continue;
         const preserved = ["manual", "failed"].includes(review.status);
         Object.assign(review, { text: input.text, status: preserved ? review.status : "pending",
           reply: "", generationRecord: null, completedAt: null, retryAt: null });
+        delete review.publishState;
         if (!preserved) { review.manualReason = ""; added++; }
       }
       // Refresh signed media URLs even when the review itself has not changed.
@@ -279,6 +300,41 @@ export class TaskRunner {
     return this.commit();
   }
 
+  async runPublication(review, work, current) {
+    const failure = message => Object.assign(new Error(message), { code: "PUBLISH_FAILED" });
+    const result = await this.publishReply(structuredClone(review), {
+      signal: work.controller.signal,
+      beforeSubmit: () => this.enqueue(async () => {
+        if (!current() || !await this.canProcess() || !current()) throw new DOMException("已停止发布，来源页已改变。", "AbortError");
+        review.publishState = "dispatching";
+        await this.commit();
+      }),
+    });
+    await this.enqueue(async () => {
+      if (!current() || !await this.canProcess() || !current()) return;
+      if (result.state === "published" && review.publishState === "dispatching") {
+        review.status = "replied";
+        review.completedAt = this.now();
+        delete review.publishState;
+      } else if (Object.hasOwn(publishManual, result.state)) {
+        review.status = "manual";
+        review.manualReason = publishManual[result.state];
+        review.publishState = "skipped";
+      } else if (result.state === "blocked") {
+        review.publishState = "ready";
+        throw failure(result.message || "发布前校验失败，已暂停任务。");
+      } else if (result.state === "rejected") {
+        review.status = "manual";
+        review.publishState = "rejected";
+        review.manualReason = "平台拒绝提交这条回复，请在店铺评价页检查账号权限和评价状态。";
+        throw failure(review.manualReason);
+      } else {
+        throw failure(publishUncertain);
+      }
+      await this.advanceAfterReview(review);
+    });
+  }
+
   async runGeneration(work) {
     const current = () => this.work === work && work.generation === this.generation && this.state.status === "running";
     const review = this.state.reviews.find(item => item.id === this.state.currentId);
@@ -299,13 +355,17 @@ export class TaskRunner {
         });
         return;
       }
+      if (review.publishState === "ready" && this.publishReply) {
+        await this.runPublication(review, work, current);
+        return;
+      }
       if (review.retryAt > this.now()) throw Object.assign(new Error(`服务要求等待，请于 ${new Date(review.retryAt).toLocaleTimeString()} 后继续。`), { code: "RETRY_WAIT" });
       const generated = await this.generateReply(structuredClone(review), {
         source: this.state.reviewSource, generation: work.generation, signal: work.controller.signal,
         onStateChange: callState => {
           if (!current()) return;
           void this.enqueue(async () => {
-            if (!current()) return;
+            if (!current() || review.publishState) return;
             this.state.callState = callState;
             review.retryAt = callState.nextRetryAt;
             await this.commit();
@@ -321,8 +381,17 @@ export class TaskRunner {
         delete review.failureRecord;
         review.completedAt = this.now();
         review.retryAt = null;
+        if (this.publishReply && review.platformReview && review.status === "generated") {
+          review.status = "processing";
+          review.publishState = "ready";
+          review.completedAt = null;
+          this.state.callState = null;
+          await this.commit();
+          return;
+        }
         await this.advanceAfterReview(review);
       });
+      if (current() && review.publishState === "ready") await this.runPublication(review, work, current);
     } catch (error) {
       if (!current()) return;
       await this.enqueue(async () => {
@@ -334,13 +403,17 @@ export class TaskRunner {
           await this.advanceAfterReview(review);
           return;
         }
-        const known = ["INPUT_INVALID", "OUTPUT_INVALID", "MODEL_REFUSED", "CONTEXT_INVALID", "MEDIA_UNAVAILABLE", "KEY_MISSING", "RETRY_WAIT", "PAGE_READ_FAILED", "GENERATION_FAILED", "COST_STORAGE_FAILED"];
+        const dispatching = review?.publishState === "dispatching";
+        const known = ["INPUT_INVALID", "OUTPUT_INVALID", "MODEL_REFUSED", "CONTEXT_INVALID", "MEDIA_UNAVAILABLE", "KEY_MISSING", "RETRY_WAIT", "PAGE_READ_FAILED", "GENERATION_FAILED", "COST_STORAGE_FAILED", "PUBLISH_FAILED"];
         this.cancelTick();
         this.resetCurrent();
         this.state.status = "paused";
-        this.state.error = known.includes(error.code) ? error.message : error.status
-          ? `模型请求失败（HTTP ${error.status}），任务已暂停，请负责人检查模型账户后继续。`
-          : "评价读取或模型调用失败，任务已暂停，请检查页面、网络和本机组件后继续。";
+        let message = "评价读取或模型调用失败，任务已暂停，请检查页面、网络和本机组件后继续。";
+        if (dispatching) message = publishUncertain;
+        else if (known.includes(error.code)) message = error.message;
+        else if (review?.publishState === "ready") message = "准备发布时无法连接原评价页，任务已暂停，生成的回复已保留。";
+        else if (error.status) message = `模型请求失败（HTTP ${error.status}），任务已暂停，请负责人检查模型账户后继续。`;
+        this.state.error = message;
         await this.commit();
       });
     }
@@ -375,8 +448,10 @@ export class TaskRunner {
           break;
         case "RECONNECTING":
           if (this.state.status === "running") {
+            const dispatching = this.state.reviews.find(review => review.id === this.state.currentId)?.publishState === "dispatching";
             this.resetCurrent();
-            this.state.status = "recovering";
+            this.state.status = dispatching ? "paused" : "recovering";
+            if (dispatching) this.state.error = publishUncertain;
           }
           break;
         case "RECONNECTED":
@@ -410,6 +485,7 @@ export class TaskRunner {
           if (!["pending", "failed"].includes(review.status)) throw new Error("请先暂停当前处理，再标记尚未完成的评价。");
           review.status = "manual";
           review.manualReason = String(payload.reason || "").trim() || MANUAL_REASON;
+          if (review.publishState === "ready") review.publishState = "skipped";
           delete this.state.expiresAt;
           break;
         }

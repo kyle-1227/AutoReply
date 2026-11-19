@@ -33,10 +33,11 @@ export async function readShopSource(source, { browser = chrome } = {}) {
 }
 
 /** Runs only in the bound page's MAIN world. No extension data or secrets enter it. */
-export async function observeReviewPage(operationId) {
+export async function observeReviewPage(operationId, lookup = null) {
   const key = Symbol.for("autoreply.review-reader");
   if (window[key]) return { error: "此页面正在读取评价，请稍后重试。" };
   const originalUrl = location.href;
+  if (lookup && originalUrl !== lookup.url) return { error: "评价来源页已改变。" };
   const originalFetch = window.fetch;
   let waiter = null, stopped = false;
   const pendingCancellations = new Set();
@@ -170,6 +171,7 @@ export async function observeReviewPage(operationId) {
     }
     let batch = await query(() => filter().click());
     const source = batch.source;
+    if (lookup && source.shopId !== lookup.shopId) fail("评价来源店铺已改变。");
     const reviews = [], seen = new Set();
     let page = 1, pageSize = 0, rawCount = 0;
     while (true) {
@@ -177,6 +179,8 @@ export async function observeReviewPage(operationId) {
         (Number(document.querySelector('[data-tid="m4b_pagination"] [aria-current="true"]')?.textContent) === page &&
         document.querySelector('[data-tid="rating-list"]')?.children.length === batch.reviews.length)));
       if (batch.source.shopId !== source.shopId) fail("读取期间店铺发生变化，已停止读取。");
+      const match = lookup && batch.reviews.find(review => review.reviewId === lookup.reviewId);
+      if (match) return { found: true };
       const pagination = document.querySelector('[data-tid="m4b_pagination"]');
       pageSize = Number(pagination?.querySelector('input')?.value.match(/^\d+/)?.[0]) || (batch.total === 0 ? 50 : 0);
       if (!pageSize) fail("无法识别每页评价数量。");
@@ -189,6 +193,7 @@ export async function observeReviewPage(operationId) {
       const disabled = !next || next.getAttribute("aria-disabled") === "true" || next.classList.contains("core-pagination-item-disabled");
       if (disabled) {
         if (page < Math.ceil(batch.total / pageSize)) fail(`分页提前结束：已读取第 ${page} 页，平台总数 ${batch.total} 条，请重试。`);
+        if (lookup) return { found: false };
         // Some real pages are sparse or overlap even while total stays fixed.
         // Keep the discrepancy visible instead of dropping every valid review.
         return { source, reviews, pagination: { page, pageSize, total: batch.total,
@@ -207,11 +212,11 @@ export async function observeReviewPage(operationId) {
   }
 }
 
-export async function readReviews(source, { browser = chrome, signal } = {}) {
+export async function readReviews(source, { browser = chrome, signal, lookup = null } = {}) {
   if (!isReviewPage(source.url)) throw new Error("请在 TikTok Shop 马来西亚站或新加坡站的商品评分页面读取评价。");
   const check = async () => {
     const tab = await browser.tabs.get(source.tabId);
-    if (tab.url !== source.url || tab.windowId !== source.windowId || tab.status === "loading") throw new Error("来源页面已改变或正在加载，请稍后重试。");
+    if (tab.url !== source.url || tab.windowId !== source.windowId || tab.status === "loading" || tab.discarded || tab.frozen) throw new Error("来源页面已改变或正在加载，请稍后重试。");
   };
   await check();
   signal?.throwIfAborted();
@@ -228,12 +233,13 @@ export async function readReviews(source, { browser = chrome, signal } = {}) {
     if (signal?.aborted) abort();
   });
   try {
-    const injected = browser.scripting.executeScript({ target: { tabId: source.tabId }, world: "MAIN", func: observeReviewPage, args: [operationId] });
+    const injected = browser.scripting.executeScript({ target: { tabId: source.tabId }, world: "MAIN", func: observeReviewPage, args: [operationId, lookup] });
     const results = await Promise.race([injected, cancelled]);
     signal?.throwIfAborted();
     await check();
     const batch = results.find(item => item.frameId === 0)?.result;
     if (batch?.error) throw Object.assign(new Error(batch.error), { code: "PAGE_READ_FAILED" });
+    if (lookup && typeof batch?.found === "boolean") return batch.found;
     return validateReviewBatch(batch);
   } finally { signal?.removeEventListener("abort", abort); }
 }
